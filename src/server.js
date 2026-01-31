@@ -8,20 +8,55 @@ import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
 
-// Restore Claude Code symlinks from persistent volume on container restart.
-// The data lives on /data (Railway volume) but ~/.claude and ~/.claude.json
-// are on the ephemeral root filesystem and need re-linking after each boot.
-for (const [link, target] of [
-  [path.join(os.homedir(), ".claude"), "/data/.claude"],
-  [path.join(os.homedir(), ".claude.json"), "/data/.claude.json"],
-]) {
+// Restore Claude Code from persistent volume on container restart.
+// The binary lives at /data/claude-code and config at /data/.claude — both on
+// the Railway volume. The ephemeral root filesystem needs symlinks recreated
+// after every boot so that `claude` is on PATH and settings/history persist.
+{
+  const home = os.homedir();
+
+  // Claude Code binary: /root/.local/share/claude -> /data/claude-code
+  // The bin symlink at /root/.local/bin/claude points through this.
+  const localShare = path.join(home, ".local", "share");
+  const localBin = path.join(home, ".local", "bin");
+  const links = [
+    [path.join(localShare, "claude"), "/data/claude-code"],
+    [path.join(home, ".claude"), "/data/.claude"],
+    [path.join(home, ".claude.json"), "/data/.claude.json"],
+  ];
+
+  // Ensure parent directories exist (ephemeral fs starts empty).
+  for (const dir of [localShare, localBin]) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  for (const [link, target] of links) {
+    try {
+      if (fs.existsSync(target) && !fs.existsSync(link)) {
+        fs.symlinkSync(target, link);
+        console.log(`[startup] symlinked ${link} -> ${target}`);
+      }
+    } catch (err) {
+      console.warn(`[startup] could not symlink ${link}: ${err.message}`);
+    }
+  }
+
+  // Ensure the claude bin symlink points at the latest persisted version.
+  const binLink = path.join(localBin, "claude");
+  const versionsDir = "/data/claude-code/versions";
   try {
-    if (fs.existsSync(target) && !fs.existsSync(link)) {
-      fs.symlinkSync(target, link);
-      console.log(`[startup] symlinked ${link} -> ${target}`);
+    if (fs.existsSync(versionsDir)) {
+      const versions = fs.readdirSync(versionsDir).sort();
+      if (versions.length > 0) {
+        const latest = path.join(versionsDir, versions[versions.length - 1]);
+        // Recreate bin symlink if missing or stale.
+        try { fs.unlinkSync(binLink); } catch {}
+        fs.symlinkSync(latest, binLink);
+        console.log(`[startup] symlinked ${binLink} -> ${latest}`);
+      }
     }
   } catch (err) {
-    console.warn(`[startup] could not symlink ${link}: ${err.message}`);
+    console.warn(`[startup] could not link claude binary: ${err.message}`);
   }
 }
 
