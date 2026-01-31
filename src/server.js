@@ -8,6 +8,23 @@ import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
 
+// Restore Claude Code symlinks from persistent volume on container restart.
+// The data lives on /data (Railway volume) but ~/.claude and ~/.claude.json
+// are on the ephemeral root filesystem and need re-linking after each boot.
+for (const [link, target] of [
+  [path.join(os.homedir(), ".claude"), "/data/.claude"],
+  [path.join(os.homedir(), ".claude.json"), "/data/.claude.json"],
+]) {
+  try {
+    if (fs.existsSync(target) && !fs.existsSync(link)) {
+      fs.symlinkSync(target, link);
+      console.log(`[startup] symlinked ${link} -> ${target}`);
+    }
+  } catch (err) {
+    console.warn(`[startup] could not symlink ${link}: ${err.message}`);
+  }
+}
+
 // Railway commonly sets PORT=8080 for HTTP services.
 const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
 const STATE_DIR =
