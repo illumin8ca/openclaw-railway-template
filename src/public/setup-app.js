@@ -172,5 +172,91 @@
       .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
   };
 
+  // GitHub token save handler
+  var githubTokenSaveBtn = document.getElementById('githubTokenSave');
+  var githubRepoSelect = document.getElementById('githubRepo');
+  var githubTokenStatus = document.getElementById('githubTokenStatus');
+
+  if (githubTokenSaveBtn) {
+    githubTokenSaveBtn.onclick = function () {
+      var token = document.getElementById('githubToken').value.trim();
+      if (!token) {
+        alert('Enter a GitHub token first');
+        return;
+      }
+
+      githubTokenSaveBtn.disabled = true;
+      githubTokenSaveBtn.textContent = 'Validating...';
+      githubRepoSelect.innerHTML = '<option value="">Loading repos...</option>';
+      githubRepoSelect.disabled = true;
+      if (githubTokenStatus) {
+        githubTokenStatus.textContent = 'Validating token...';
+        githubTokenStatus.style.color = '#8892b0';
+      }
+
+      // Fetch all repos using pagination (GitHub API max 100 per page)
+      var allRepos = [];
+      function fetchPage(page) {
+        return fetch('https://api.github.com/user/repos?per_page=100&sort=updated&type=all&page=' + page, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        })
+        .then(function(res) {
+          if (!res.ok) throw new Error('Invalid token or API error (HTTP ' + res.status + ')');
+          return res.json().then(function(repos) {
+            return { repos: repos, hasMore: repos.length === 100 };
+          });
+        });
+      }
+
+      function fetchAllPages(page) {
+        return fetchPage(page).then(function(result) {
+          allRepos = allRepos.concat(result.repos);
+          if (result.hasMore) {
+            return fetchAllPages(page + 1);
+          }
+          return allRepos;
+        });
+      }
+
+      fetchAllPages(1)
+        .then(function(repos) {
+          githubTokenSaveBtn.textContent = '✓ Saved';
+          githubTokenSaveBtn.style.background = '#22c55e';
+          if (githubTokenStatus) {
+            githubTokenStatus.innerHTML = '✓ Token validated — ' + repos.length + ' repos found';
+            githubTokenStatus.style.color = '#22c55e';
+          }
+
+          githubRepoSelect.innerHTML = '<option value="">Select a repository...</option>';
+
+          repos.forEach(function(repo) {
+            var opt = document.createElement('option');
+            opt.value = repo.full_name;
+            opt.textContent = repo.full_name + (repo.private ? ' 🔒' : '');
+            githubRepoSelect.appendChild(opt);
+          });
+
+          githubRepoSelect.disabled = false;
+
+          // Reset button after 3s
+          setTimeout(function() {
+            githubTokenSaveBtn.textContent = 'Save Token';
+            githubTokenSaveBtn.style.background = '';
+            githubTokenSaveBtn.disabled = false;
+          }, 3000);
+        })
+        .catch(function(err) {
+          githubTokenSaveBtn.textContent = 'Save Token';
+          githubTokenSaveBtn.style.background = '';
+          githubTokenSaveBtn.disabled = false;
+          githubRepoSelect.innerHTML = '<option value="">Save token first...</option>';
+          if (githubTokenStatus) {
+            githubTokenStatus.innerHTML = '✗ ' + err.message;
+            githubTokenStatus.style.color = '#ef4444';
+          }
+        });
+    };
+  }
+
   refreshStatus();
 })();

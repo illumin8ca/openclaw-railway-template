@@ -87,24 +87,31 @@
       <option value="admin">Admin (create/delete pages, limited design)</option>
     </select>
 
-    <label>GitHub Repository</label>
-    <input id="githubRepo" type="text" placeholder="illumin8ca/morrowmarriage-com" />
-    <div class="muted" style="margin-top: 0.25rem">
-      The GitHub repo containing the client's website (owner/repo format).
+    <label>GitHub Personal Access Token (fine-grained)</label>
+    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+      <input id="githubToken" type="password" placeholder="github_pat_..." style="flex: 1;" />
+      <button type="button" id="githubTokenSave" style="white-space: nowrap; padding: 0.6rem 1rem; margin: 0;">Save Token</button>
+    </div>
+    <div id="githubTokenStatus" class="muted" style="margin-top: 0.25rem">
+      Fine-grained PAT with Contents:Read permission.
+      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Create one →</a>
     </div>
 
-    <label>GitHub Token</label>
-    <input id="githubToken" type="password" placeholder="github_pat_..." />
-    <div class="muted" style="margin-top: 0.25rem">
-      Fine-grained PAT with read access to the repo.
-      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Create one here →</a>
+    <label>Repository</label>
+    <select id="githubRepo" disabled style="margin-top: 0.25rem;">
+      <option value="">Save token first...</option>
+    </select>
+
+    <div style="display: flex; gap: 1rem; margin-top: 0;">
+      <div style="flex: 1;">
+        <label>Production Branch</label>
+        <input id="prodBranch" type="text" placeholder="main" value="main" />
+      </div>
+      <div style="flex: 1;">
+        <label>Development Branch</label>
+        <input id="devBranch" type="text" placeholder="development" value="development" />
+      </div>
     </div>
-
-    <label>Production Branch</label>
-    <input id="prodBranch" type="text" placeholder="main" value="main" />
-
-    <label>Development Branch</label>
-    <input id="devBranch" type="text" placeholder="development" value="development" />
   </div>
 
   <div class="card">
