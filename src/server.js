@@ -771,10 +771,29 @@ async function cloneAndBuild(repoUrl, branch, targetDir, token) {
     : repoUrl;
 
   console.log(`[build] Cloning ${repoUrl} branch=${branch} into ${targetDir}`);
-  const clone = await runCmd('git', ['clone', '--depth', '1', '--branch', branch, authUrl, targetDir]);
+  let clone = await runCmd('git', ['clone', '--depth', '1', '--branch', branch, authUrl, targetDir]);
   if (clone.code !== 0) {
-    console.error(`[build] Clone failed: ${clone.output}`);
-    return { ok: false, output: clone.output };
+    // If branch doesn't exist, create it from the default branch
+    if (clone.output.includes('not found') || clone.output.includes('Could not find remote branch')) {
+      console.log(`[build] Branch '${branch}' not found, creating from default branch...`);
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.mkdirSync(targetDir, { recursive: true });
+      
+      // Clone default branch
+      clone = await runCmd('git', ['clone', '--depth', '1', authUrl, targetDir]);
+      if (clone.code === 0) {
+        // Create and push the new branch
+        await runCmd('git', ['checkout', '-b', branch], { cwd: targetDir });
+        await runCmd('git', ['push', 'origin', branch], { cwd: targetDir });
+        console.log(`[build] Created branch '${branch}' from default`);
+      } else {
+        console.error(`[build] Clone failed: ${clone.output}`);
+        return { ok: false, output: clone.output };
+      }
+    } else {
+      console.error(`[build] Clone failed: ${clone.output}`);
+      return { ok: false, output: clone.output };
+    }
   }
 
   // Detect build system and install deps
