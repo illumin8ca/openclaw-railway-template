@@ -56,6 +56,8 @@ RUN apt-get update \
     python3 \
     pkg-config \
     sudo \
+    ffmpeg \
+    rclone \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Homebrew (must run as non-root user)
@@ -85,6 +87,9 @@ RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"'
   && chmod +x /usr/local/bin/openclaw
 
 COPY src ./src
+
+# Rclone: use persistent config from /data volume
+ENV RCLONE_CONFIG=/data/.config/rclone/rclone.conf
 
 ENV PORT=8080
 EXPOSE 8080
