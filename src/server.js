@@ -603,6 +603,7 @@ function runCmd(cmd, args, opts = {}) {
       ...opts,
       env: {
         ...process.env,
+        ...(opts.env || {}),
         OPENCLAW_STATE_DIR: STATE_DIR,
         OPENCLAW_WORKSPACE_DIR: WORKSPACE_DIR,
       },
@@ -772,7 +773,12 @@ async function cloneAndBuild(repoUrl, branch, targetDir, token) {
   const packageJson = path.join(targetDir, 'package.json');
   if (fs.existsSync(packageJson)) {
     console.log(`[build] Installing dependencies...`);
-    const install = await runCmd('npm', ['install'], { cwd: targetDir });
+    // Use clean PATH to avoid esbuild version conflicts with openclaw's bundled version
+    const cleanEnv = {
+      ...process.env,
+      PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/linuxbrew/.linuxbrew/bin',
+    };
+    const install = await runCmd('npm', ['install'], { cwd: targetDir, env: cleanEnv });
     if (install.code !== 0) {
       console.error(`[build] npm install failed: ${install.output}`);
       return { ok: false, output: install.output };
@@ -780,7 +786,7 @@ async function cloneAndBuild(repoUrl, branch, targetDir, token) {
 
     // Build the site
     console.log(`[build] Running build...`);
-    const build = await runCmd('npm', ['run', 'build'], { cwd: targetDir });
+    const build = await runCmd('npm', ['run', 'build'], { cwd: targetDir, env: cleanEnv });
     if (build.code !== 0) {
       console.error(`[build] Build failed: ${build.output}`);
       return { ok: false, output: build.output };
@@ -1123,10 +1129,12 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         const domain = payload.clientDomain.trim().toLowerCase();
 
         // Determine Railway domain for CNAME target
-        // Use the Railway-assigned domain or fall back to a generated one
-        const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
-          || process.env.RAILWAY_STATIC_URL?.replace('https://', '')?.trim()
-          || 'gerald-production.up.railway.app'; // fallback
+        // IMPORTANT: Only use the *.up.railway.app domain, NOT custom domains (would be circular CNAME)
+        const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim() || '';
+        const staticUrl = process.env.RAILWAY_STATIC_URL?.replace('https://', '')?.trim() || '';
+        const railwayDomain = (publicDomain.endsWith('.up.railway.app') ? publicDomain : '')
+          || (staticUrl.endsWith('.up.railway.app') ? staticUrl : '')
+          || `${(process.env.RAILWAY_SERVICE_NAME || 'gerald').toLowerCase()}-production.up.railway.app`;
 
         extra += `\n[dns] Configuring Cloudflare DNS for ${domain}...\n`;
         const dnsResult = await setupCloudflareDNS(domain, railwayDomain);
