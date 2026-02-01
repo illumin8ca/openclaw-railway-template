@@ -101,6 +101,11 @@ function serveStaticSite(dir, req, res) {
   if (fs.existsSync(indexPath)) {
     return res.sendFile(indexPath);
   }
+  // Show a "Coming Soon" placeholder if no site is built yet
+  const placeholderPath = path.join(process.cwd(), 'src', 'public', 'placeholder.html');
+  if (fs.existsSync(placeholderPath)) {
+    return res.status(200).sendFile(placeholderPath);
+  }
   return res.status(404).send('Not found');
 }
 

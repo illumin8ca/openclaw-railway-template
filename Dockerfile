@@ -83,6 +83,12 @@ RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 # Copy built openclaw
 COPY --from=openclaw-build /openclaw /openclaw
 
+# Remove esbuild binaries from openclaw's dependencies to prevent version conflicts
+# with client project builds (openclaw bundles esbuild 0.25.x which breaks projects needing 0.27.x)
+RUN find /openclaw -name 'esbuild' -path '*/bin/esbuild' -type f -delete 2>/dev/null; \
+    find /openclaw -name 'esbuild' -path '*/.bin/esbuild' -type l -delete 2>/dev/null; \
+    true
+
 # Provide a openclaw executable
 RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"' > /usr/local/bin/openclaw \
   && chmod +x /usr/local/bin/openclaw
