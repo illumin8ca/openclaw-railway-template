@@ -951,6 +951,13 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         clawArgs(["config", "set", "--json", "gateway.trustedProxies", '["127.0.0.1/8","::1/128","100.64.0.0/10","172.16.0.0/12"]']),
       );
 
+      // Sync the gateway auth token to match the wrapper's OPENCLAW_GATEWAY_TOKEN env var
+      // This ensures the proxy can authenticate WebSocket connections
+      await runCmd(
+        OPENCLAW_NODE,
+        clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]),
+      );
+
       const channelsHelp = await runCmd(
         OPENCLAW_NODE,
         clawArgs(["channels", "add", "--help"]),
