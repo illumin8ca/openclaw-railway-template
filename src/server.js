@@ -69,6 +69,41 @@ const WORKSPACE_DIR =
   process.env.OPENCLAW_WORKSPACE_DIR?.trim() ||
   path.join(STATE_DIR, "workspace");
 
+// Illumin8 site directories
+const SITE_DIR = path.join(WORKSPACE_DIR, 'site');
+const PRODUCTION_DIR = path.join(SITE_DIR, 'production');
+const DEV_DIR = path.join(SITE_DIR, 'dev');
+
+// Read CLIENT_DOMAIN from env or from a persisted config file
+function getClientDomain() {
+  const envDomain = process.env.CLIENT_DOMAIN?.trim();
+  if (envDomain) return envDomain;
+  // Try reading from persisted config
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(STATE_DIR, 'illumin8.json'), 'utf8'));
+    return cfg.clientDomain || null;
+  } catch { return null; }
+}
+
+// Serve static files with SPA fallback
+function serveStaticSite(dir, req, res) {
+  const reqPath = decodeURIComponent(req.path);
+  const filePath = path.join(dir, reqPath === '/' ? 'index.html' : reqPath);
+  // Prevent directory traversal
+  if (!filePath.startsWith(dir)) {
+    return res.status(403).send('Forbidden');
+  }
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    return res.sendFile(filePath);
+  }
+  // SPA fallback
+  const indexPath = path.join(dir, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  return res.status(404).send('Not found');
+}
+
 // Protect /setup with a user-provided password.
 const SETUP_PASSWORD = process.env.SETUP_PASSWORD?.trim();
 
@@ -492,6 +527,9 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     openclawVersion: version.output.trim(),
     channelsAddHelp: channelsHelp.output,
     authGroups,
+    defaultAuthGroup: process.env.DEFAULT_MODEL?.includes('moonshot') ? 'moonshot' : null,
+    defaultModel: process.env.DEFAULT_MODEL || null,
+    defaultClientDomain: process.env.CLIENT_DOMAIN?.trim() || null,
   });
 });
 
@@ -573,6 +611,72 @@ function runCmd(cmd, args, opts = {}) {
 
     proc.on("close", (code) => resolve({ code: code ?? 0, output: out }));
   });
+}
+
+async function cloneAndBuild(repoUrl, branch, targetDir, token) {
+  // Clean target dir
+  fs.rmSync(targetDir, { recursive: true, force: true });
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  // Clone with token auth
+  const authUrl = token
+    ? repoUrl.replace('https://', `https://x-access-token:${token}@`)
+    : repoUrl;
+
+  console.log(`[build] Cloning ${repoUrl} branch=${branch} into ${targetDir}`);
+  const clone = await runCmd('git', ['clone', '--depth', '1', '--branch', branch, authUrl, targetDir]);
+  if (clone.code !== 0) {
+    console.error(`[build] Clone failed: ${clone.output}`);
+    return { ok: false, output: clone.output };
+  }
+
+  // Detect build system and install deps
+  const packageJson = path.join(targetDir, 'package.json');
+  if (fs.existsSync(packageJson)) {
+    console.log(`[build] Installing dependencies...`);
+    const install = await runCmd('npm', ['install'], { cwd: targetDir });
+    if (install.code !== 0) {
+      console.error(`[build] npm install failed: ${install.output}`);
+      return { ok: false, output: install.output };
+    }
+
+    // Build the site
+    console.log(`[build] Running build...`);
+    const build = await runCmd('npm', ['run', 'build'], { cwd: targetDir });
+    if (build.code !== 0) {
+      console.error(`[build] Build failed: ${build.output}`);
+      return { ok: false, output: build.output };
+    }
+
+    // Detect output directory (common static site generators)
+    const possibleDirs = ['dist', 'build', 'out', '_site', '.output/public'];
+    let outputDir = null;
+    for (const dir of possibleDirs) {
+      const fullPath = path.join(targetDir, dir);
+      if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
+        outputDir = fullPath;
+        break;
+      }
+    }
+
+    if (outputDir && outputDir !== targetDir) {
+      // Move build output to be the root of targetDir
+      // First, move output to a temp location
+      const tmpDir = targetDir + '_built';
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.renameSync(outputDir, tmpDir);
+      // Remove the cloned source
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      // Move built output to target
+      fs.renameSync(tmpDir, targetDir);
+    }
+
+    console.log(`[build] Build complete: ${targetDir}`);
+    return { ok: true, output: `Built successfully from ${branch} branch` };
+  }
+
+  // No package.json — assume static site, already good
+  return { ok: true, output: `Cloned static site from ${branch} branch` };
 }
 
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
@@ -804,6 +908,136 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         }
       }
 
+      // ── Illumin8 client configuration ──────────────────────────────────
+      if (payload.clientDomain?.trim()) {
+        const illumin8Config = {
+          clientDomain: payload.clientDomain.trim().toLowerCase(),
+          clientName: payload.clientName?.trim() || '',
+          guardrailLevel: payload.guardrailLevel || 'standard',
+          githubRepo: payload.githubRepo?.trim() || '',
+          prodBranch: payload.prodBranch?.trim() || 'main',
+          devBranch: payload.devBranch?.trim() || 'development',
+          configuredAt: new Date().toISOString(),
+        };
+
+        fs.writeFileSync(
+          path.join(STATE_DIR, 'illumin8.json'),
+          JSON.stringify(illumin8Config, null, 2)
+        );
+
+        // Also set CLIENT_DOMAIN env for current process
+        process.env.CLIENT_DOMAIN = illumin8Config.clientDomain;
+
+        extra += `\n[illumin8] Client configured: ${illumin8Config.clientDomain}\n`;
+
+        // Create site directories
+        fs.mkdirSync(path.join(SITE_DIR, 'production'), { recursive: true });
+        fs.mkdirSync(path.join(SITE_DIR, 'dev'), { recursive: true });
+
+        // Create placeholder index.html for both
+        const placeholder = `<!DOCTYPE html>
+<html><head><title>Coming Soon</title></head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#0a0a0f;color:#fff;">
+<h1>Site coming soon</h1>
+</body></html>`;
+
+        for (const dir of ['production', 'dev']) {
+          const indexPath = path.join(SITE_DIR, dir, 'index.html');
+          if (!fs.existsSync(indexPath)) {
+            fs.writeFileSync(indexPath, placeholder);
+          }
+        }
+        extra += `\n[illumin8] Site directories created\n`;
+
+        // Write CLIENT-SKILLS.md to workspace
+        try {
+          const templatePath = path.join(process.cwd(), 'src', 'templates', 'CLIENT-SKILLS.md');
+          let template = fs.readFileSync(templatePath, 'utf8');
+          template = template.replaceAll('{{CLIENT_NAME}}', payload.clientName?.trim() || 'Client');
+          template = template.replaceAll('{{CLIENT_DOMAIN}}', payload.clientDomain.trim().toLowerCase());
+
+          const skillsPath = path.join(WORKSPACE_DIR, 'CLIENT-SKILLS.md');
+          fs.writeFileSync(skillsPath, template);
+          extra += `\n[illumin8] CLIENT-SKILLS.md written to workspace\n`;
+        } catch (err) {
+          console.error('[illumin8] Failed to write CLIENT-SKILLS.md:', err);
+          extra += `\n[illumin8] Warning: Could not write CLIENT-SKILLS.md: ${err.message}\n`;
+        }
+      }
+
+      // ── Services configuration ───────────────────────────────────────────
+      const servicesConfig = {};
+      if (payload.sendgridKey?.trim()) servicesConfig.sendgridKey = payload.sendgridKey.trim();
+      if (payload.twilioSid?.trim()) {
+        servicesConfig.twilio = {
+          accountSid: payload.twilioSid.trim(),
+          authToken: payload.twilioToken?.trim() || '',
+          phoneNumber: payload.twilioPhone?.trim() || '',
+        };
+      }
+      if (payload.turnstileSiteKey?.trim()) {
+        servicesConfig.turnstile = {
+          siteKey: payload.turnstileSiteKey.trim(),
+          secretKey: payload.turnstileSecretKey?.trim() || '',
+        };
+      }
+
+      if (Object.keys(servicesConfig).length > 0) {
+        fs.writeFileSync(
+          path.join(STATE_DIR, 'services.json'),
+          JSON.stringify(servicesConfig, null, 2)
+        );
+        extra += `\n[services] Configuration saved\n`;
+      }
+
+      // ── Clone and build website from GitHub ──────────────────────────────
+      if (payload.githubRepo?.trim() && payload.clientDomain?.trim()) {
+        const repoUrl = `https://github.com/${payload.githubRepo.trim()}`;
+        const token = payload.githubToken?.trim() || process.env.GITHUB_TOKEN?.trim() || '';
+        const prodBranch = payload.prodBranch?.trim() || 'main';
+        const devBranch = payload.devBranch?.trim() || 'development';
+
+        // Save GitHub config for future rebuilds
+        const githubConfig = {
+          repo: payload.githubRepo.trim(),
+          prodBranch,
+          devBranch,
+          // Token is saved in the state dir (Railway volume)
+          token: token,
+        };
+        fs.writeFileSync(
+          path.join(STATE_DIR, 'github.json'),
+          JSON.stringify(githubConfig, null, 2),
+          { mode: 0o600 }
+        );
+
+        // Build production
+        extra += `\n[build] Building production site from ${prodBranch}...\n`;
+        const prodResult = await cloneAndBuild(repoUrl, prodBranch, PRODUCTION_DIR, token);
+        extra += `[build] Production: ${prodResult.output}\n`;
+
+        // Build development
+        extra += `[build] Building dev site from ${devBranch}...\n`;
+        const devResult = await cloneAndBuild(repoUrl, devBranch, DEV_DIR, token);
+        extra += `[build] Dev: ${devResult.output}\n`;
+      }
+
+      // ── Default model configuration ──────────────────────────────────────
+      if (process.env.DEFAULT_MODEL?.trim()) {
+        await runCmd(OPENCLAW_NODE, clawArgs([
+          'config', 'set', 'agents.defaults.model.primary', process.env.DEFAULT_MODEL.trim()
+        ]));
+        extra += `\n[model] Default model set: ${process.env.DEFAULT_MODEL}\n`;
+      }
+
+      if (process.env.MOONSHOT_API_KEY?.trim()) {
+        await runCmd(OPENCLAW_NODE, clawArgs([
+          'config', 'set', 'agents.defaults.model.primary',
+          process.env.DEFAULT_MODEL?.trim() || 'moonshot/kimi-k2.5-preview'
+        ]));
+        extra += `\n[model] Moonshot configured\n`;
+      }
+
       // Apply changes immediately.
       await restartGateway();
     }
@@ -874,6 +1108,74 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
       .send("OK - deleted config file. You can rerun setup now.");
   } catch (err) {
     res.status(500).type("text/plain").send(String(err));
+  }
+});
+
+// Rebuild site from GitHub (can be triggered by Gerald or webhook)
+app.post('/api/rebuild', requireSetupAuth, async (req, res) => {
+  try {
+    const githubConfigPath = path.join(STATE_DIR, 'github.json');
+    if (!fs.existsSync(githubConfigPath)) {
+      return res.status(400).json({ ok: false, error: 'No GitHub configuration found. Run setup first.' });
+    }
+
+    const githubConfig = JSON.parse(fs.readFileSync(githubConfigPath, 'utf8'));
+    const repoUrl = `https://github.com/${githubConfig.repo}`;
+    const token = githubConfig.token || process.env.GITHUB_TOKEN?.trim() || '';
+    const target = req.body?.target || 'both'; // 'production', 'dev', or 'both'
+
+    let output = '';
+
+    if (target === 'production' || target === 'both') {
+      const result = await cloneAndBuild(repoUrl, githubConfig.prodBranch, PRODUCTION_DIR, token);
+      output += `Production (${githubConfig.prodBranch}): ${result.output}\n`;
+    }
+
+    if (target === 'dev' || target === 'both') {
+      const result = await cloneAndBuild(repoUrl, githubConfig.devBranch, DEV_DIR, token);
+      output += `Dev (${githubConfig.devBranch}): ${result.output}\n`;
+    }
+
+    res.json({ ok: true, output });
+  } catch (err) {
+    console.error('[rebuild]', err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Webhook for GitHub push events (auto-rebuild)
+app.post('/api/webhook/github', express.json(), async (req, res) => {
+  try {
+    const githubConfigPath = path.join(STATE_DIR, 'github.json');
+    if (!fs.existsSync(githubConfigPath)) {
+      return res.status(200).json({ ok: true, skipped: true, reason: 'Not configured' });
+    }
+
+    const githubConfig = JSON.parse(fs.readFileSync(githubConfigPath, 'utf8'));
+    const ref = req.body?.ref || '';
+    const branch = ref.replace('refs/heads/', '');
+
+    console.log(`[webhook] GitHub push to branch: ${branch}`);
+
+    const repoUrl = `https://github.com/${githubConfig.repo}`;
+    const token = githubConfig.token || process.env.GITHUB_TOKEN?.trim() || '';
+
+    if (branch === githubConfig.prodBranch) {
+      console.log(`[webhook] Rebuilding production...`);
+      const result = await cloneAndBuild(repoUrl, branch, PRODUCTION_DIR, token);
+      return res.json({ ok: true, target: 'production', output: result.output });
+    }
+
+    if (branch === githubConfig.devBranch) {
+      console.log(`[webhook] Rebuilding dev...`);
+      const result = await cloneAndBuild(repoUrl, branch, DEV_DIR, token);
+      return res.json({ ok: true, target: 'dev', output: result.output });
+    }
+
+    res.json({ ok: true, skipped: true, reason: `Branch ${branch} not tracked` });
+  } catch (err) {
+    console.error('[webhook]', err);
+    res.status(500).json({ ok: false, error: String(err) });
   }
 });
 
@@ -956,6 +1258,27 @@ app.use(async (req, res) => {
     return res.redirect("/setup");
   }
 
+  // ── Illumin8 host-based routing ─────────────────────────────────────
+  const clientDomain = getClientDomain();
+  if (clientDomain) {
+    const host = req.hostname?.toLowerCase();
+
+    // Production site: clientdomain.com or www.clientdomain.com
+    if (host === clientDomain || host === `www.${clientDomain}`) {
+      return serveStaticSite(PRODUCTION_DIR, req, res);
+    }
+
+    // Dev site: dev.clientdomain.com
+    if (host === `dev.${clientDomain}`) {
+      res.set('X-Robots-Tag', 'noindex, nofollow');
+      return serveStaticSite(DEV_DIR, req, res);
+    }
+
+    // Gerald chat: gerald.clientdomain.com → falls through to proxy
+    // All other hosts also fall through to proxy (setup, healthz, etc.)
+  }
+
+  // ── Existing proxy logic ─────────────────────────────────────────────
   if (isConfigured()) {
     try {
       await ensureGatewayRunning();
@@ -996,6 +1319,15 @@ server.on("upgrade", async (req, socket, head) => {
     socket.destroy();
     return;
   }
+
+  // Only proxy WebSocket for gerald subdomain or when no client domain is set
+  const clientDomain = getClientDomain();
+  const wsHost = req.headers.host?.split(':')[0]?.toLowerCase();
+  if (clientDomain && wsHost !== `gerald.${clientDomain}`) {
+    socket.destroy();
+    return;
+  }
+
   try {
     await ensureGatewayRunning();
   } catch {

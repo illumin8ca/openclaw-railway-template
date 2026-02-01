@@ -65,7 +65,80 @@
   </div>
 
   <div class="card">
-    <h2>3) Run onboarding</h2>
+    <h2>3) Client Configuration</h2>
+    <p class="muted">Configure this deployment for a specific client website.</p>
+
+    <label>Client Domain</label>
+    <input id="clientDomain" type="text" placeholder="cassandkathryn.com" />
+    <div class="muted" style="margin-top: 0.25rem">
+      The client's primary domain. This will configure routing for:<br/>
+      <code>clientdomain.com</code> (production) &middot;
+      <code>dev.clientdomain.com</code> (staging) &middot;
+      <code>gerald.clientdomain.com</code> (chat)
+    </div>
+
+    <label>Client Name</label>
+    <input id="clientName" type="text" placeholder="Cass & Kathryn" />
+
+    <label>Guardrail Level</label>
+    <select id="guardrailLevel">
+      <option value="standard">Standard (text + images only)</option>
+      <option value="admin">Admin (create/delete pages, limited design)</option>
+    </select>
+
+    <label>GitHub Repository</label>
+    <input id="githubRepo" type="text" placeholder="illumin8ca/morrowmarriage-com" />
+    <div class="muted" style="margin-top: 0.25rem">
+      The GitHub repo containing the client's website (owner/repo format).
+    </div>
+
+    <label>GitHub Token</label>
+    <input id="githubToken" type="password" placeholder="github_pat_..." />
+    <div class="muted" style="margin-top: 0.25rem">
+      Fine-grained PAT with read access to the repo. Each client site gets its own token.
+    </div>
+
+    <label>Production Branch</label>
+    <input id="prodBranch" type="text" placeholder="main" value="main" />
+
+    <label>Development Branch</label>
+    <input id="devBranch" type="text" placeholder="development" value="development" />
+  </div>
+
+  <div class="card">
+    <h2>4) Services (Optional)</h2>
+    <p class="muted">Configure email, SMS, and form protection. These can also be set up later.</p>
+
+    <label>SendGrid API Key</label>
+    <input id="sendgridKey" type="password" placeholder="SG.xxx" />
+    <div class="muted" style="margin-top: 0.25rem">
+      For contact form email notifications.
+    </div>
+
+    <label>Twilio Account SID</label>
+    <input id="twilioSid" type="text" placeholder="ACxxx" />
+
+    <label>Twilio Auth Token</label>
+    <input id="twilioToken" type="password" placeholder="" />
+
+    <label>Twilio Phone Number</label>
+    <input id="twilioPhone" type="text" placeholder="+1234567890" />
+    <div class="muted" style="margin-top: 0.25rem">
+      For SMS notifications when contact forms are submitted.
+    </div>
+
+    <label>Cloudflare Turnstile Site Key</label>
+    <input id="turnstileSiteKey" type="text" placeholder="" />
+
+    <label>Cloudflare Turnstile Secret Key</label>
+    <input id="turnstileSecretKey" type="password" placeholder="" />
+    <div class="muted" style="margin-top: 0.25rem">
+      For protecting contact forms. Get keys from Cloudflare Dashboard → Turnstile.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>5) Run onboarding</h2>
     <button id="run">Run setup</button>
     <button id="pairingApprove" class="secondary-button">Approve pairing</button>
     <button id="reset" class="tertiary-button">Reset setup</button>

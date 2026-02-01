@@ -59,6 +59,24 @@
       var ver = j.openclawVersion ? (' | ' + j.openclawVersion) : '';
       setStatus((j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below') + ver);
       renderAuth(j.authGroups || []);
+
+      // Pre-select default auth group if specified by server
+      if (j.defaultAuthGroup) {
+        authGroupEl.value = j.defaultAuthGroup;
+        authGroupEl.onchange();
+        if (j.defaultAuthGroup === 'moonshot') {
+          authChoiceEl.value = 'moonshot-api-key';
+        }
+      }
+
+      // Pre-fill client domain if server has a default
+      if (j.defaultClientDomain) {
+        var clientDomainEl = document.getElementById('clientDomain');
+        if (clientDomainEl && !clientDomainEl.value) {
+          clientDomainEl.value = j.defaultClientDomain;
+        }
+      }
+
       // If channels are unsupported, surface it for debugging.
       if (j.channelsAddHelp && j.channelsAddHelp.indexOf('telegram') === -1) {
         logEl.textContent += '\nNote: this openclaw build does not list telegram in `channels add --help`. Telegram auto-add will be skipped.\n';
@@ -77,7 +95,20 @@
       telegramToken: document.getElementById('telegramToken').value,
       discordToken: document.getElementById('discordToken').value,
       slackBotToken: document.getElementById('slackBotToken').value,
-      slackAppToken: document.getElementById('slackAppToken').value
+      slackAppToken: document.getElementById('slackAppToken').value,
+      clientDomain: document.getElementById('clientDomain').value,
+      clientName: document.getElementById('clientName').value,
+      guardrailLevel: document.getElementById('guardrailLevel').value,
+      githubRepo: document.getElementById('githubRepo').value,
+      githubToken: document.getElementById('githubToken').value,
+      prodBranch: document.getElementById('prodBranch').value || 'main',
+      devBranch: document.getElementById('devBranch').value || 'development',
+      sendgridKey: document.getElementById('sendgridKey').value,
+      twilioSid: document.getElementById('twilioSid').value,
+      twilioToken: document.getElementById('twilioToken').value,
+      twilioPhone: document.getElementById('twilioPhone').value,
+      turnstileSiteKey: document.getElementById('turnstileSiteKey').value,
+      turnstileSecretKey: document.getElementById('turnstileSecretKey').value
     };
 
     logEl.textContent = 'Running...\n';
