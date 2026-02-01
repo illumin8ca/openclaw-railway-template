@@ -1508,8 +1508,16 @@ server.on("upgrade", async (req, socket, head) => {
     return;
   }
 
-  // Inject auth token via headers option (req.headers modification doesn't work for WS)
+  // Inject auth token via both headers AND query string for maximum compatibility
+  // OpenClaw gateway may read the token from the URL query string for WebSocket connections
   console.log(`[ws-upgrade] Proxying WebSocket upgrade with token: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}...`);
+
+  // Append token to the URL if not already present
+  const url = new URL(req.url, GATEWAY_TARGET);
+  if (!url.searchParams.has('token')) {
+    url.searchParams.set('token', OPENCLAW_GATEWAY_TOKEN);
+  }
+  req.url = url.pathname + url.search;
 
   proxy.ws(req, socket, head, {
     target: GATEWAY_TARGET,
