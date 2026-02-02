@@ -2516,8 +2516,12 @@ const proxy = httpProxy.createProxyServer({
   xfwd: true,
 });
 
-proxy.on("error", (err, _req, _res) => {
-  console.error("[proxy]", err);
+proxy.on("error", (err, req, res) => {
+  console.error("[proxy]", err.code || err.message);
+  if (res && !res.headersSent && typeof res.writeHead === 'function') {
+    res.writeHead(503, { 'Content-Type': 'text/html' });
+    res.end('<html><body style="background:#0a0a0f;color:#94a3b8;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#00ff87">Gerald is starting up...</h2><p>Please refresh in a few seconds.</p></div></body></html>');
+  }
 });
 
 // Inject auth token into HTTP proxy requests
