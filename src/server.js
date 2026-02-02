@@ -340,15 +340,26 @@ function serveStaticSite(dir, req, res) {
   if (!filePath.startsWith(dir)) {
     return res.status(403).send('Forbidden');
   }
+  // 1. Exact file match (e.g., /styles.css, /image.png)
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     return res.sendFile(filePath);
   }
-  // SPA fallback
-  const indexPath = path.join(dir, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    return res.sendFile(indexPath);
+  // 2. Directory with index.html (e.g., /about → /about/index.html) — Astro MPA pattern
+  const dirIndexPath = path.join(filePath, 'index.html');
+  if (fs.existsSync(dirIndexPath) && fs.statSync(dirIndexPath).isFile()) {
+    return res.sendFile(dirIndexPath);
   }
-  // Show a "Coming Soon" placeholder if no site is built yet
+  // 3. Try adding .html extension (e.g., /about → /about.html)
+  const htmlPath = filePath + '.html';
+  if (fs.existsSync(htmlPath) && fs.statSync(htmlPath).isFile()) {
+    return res.sendFile(htmlPath);
+  }
+  // 4. 404 page if one exists
+  const notFoundPath = path.join(dir, '404.html');
+  if (fs.existsSync(notFoundPath)) {
+    return res.status(404).sendFile(notFoundPath);
+  }
+  // 5. Show a "Coming Soon" placeholder if no site is built yet
   const placeholderPath = path.join(process.cwd(), 'src', 'public', 'placeholder.html');
   if (fs.existsSync(placeholderPath)) {
     return res.status(200).sendFile(placeholderPath);
