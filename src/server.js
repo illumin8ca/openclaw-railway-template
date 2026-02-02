@@ -2108,8 +2108,12 @@ proxy.on("error", (err, req, res) => {
   }
 });
 
-// Inject auth token into HTTP proxy requests
+// Inject auth token into HTTP proxy requests — only for gateway, not Dashboard
 proxy.on("proxyReq", (proxyReq, req, res) => {
+  if (req._proxyTarget === 'dashboard') {
+    // Don't inject gateway token — Dashboard handles its own auth via cookies/JWT
+    return;
+  }
   console.log(`[proxy] HTTP ${req.method} ${req.url} - injecting token: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}...`);
   proxyReq.setHeader("Authorization", `Bearer ${OPENCLAW_GATEWAY_TOKEN}`);
 });
@@ -2155,6 +2159,7 @@ app.use(async (req, res, next) => {
       }
       
       // Everything else → Gerald Dashboard (Dashboard handles its own auth)
+      req._proxyTarget = 'dashboard';
       return proxy.web(req, res, { target: DASHBOARD_TARGET });
     }
 
