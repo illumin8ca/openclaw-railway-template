@@ -310,14 +310,19 @@ async function startGateway() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
-  // Sync wrapper token to openclaw.json before every gateway start.
-  // This ensures the gateway's config-file token matches what the wrapper injects via proxy.
-  console.log(`[gateway] ========== GATEWAY START TOKEN SYNC ==========`);
+  // Sync critical config before every gateway start.
+  console.log(`[gateway] ========== GATEWAY START CONFIG SYNC ==========`);
   console.log(`[gateway] Syncing wrapper token to config: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}... (len: ${OPENCLAW_GATEWAY_TOKEN.length})`);
 
   const syncResult = await runCmd(
     OPENCLAW_NODE,
     clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]),
+  );
+
+  // Ensure OpenAI-compatible chat endpoint is enabled (required by Gerald Dashboard)
+  await runCmd(
+    OPENCLAW_NODE,
+    clawArgs(["config", "set", "gateway.http.endpoints.chatCompletions.enabled", "true"]),
   );
 
   console.log(`[gateway] Sync result: exit code ${syncResult.code}`);
@@ -1478,6 +1483,11 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       await runCmd(
         OPENCLAW_NODE,
         clawArgs(["config", "set", "gateway.controlUi.enabled", "false"]),
+      );
+      // Enable OpenAI-compatible chat completions endpoint (required by Gerald Dashboard)
+      await runCmd(
+        OPENCLAW_NODE,
+        clawArgs(["config", "set", "gateway.http.endpoints.chatCompletions.enabled", "true"]),
       );
       await runCmd(
         OPENCLAW_NODE,
