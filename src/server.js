@@ -174,7 +174,7 @@ function createSession(email) {
   auth.sessions[sessionId] = {
     email: email.toLowerCase().trim(),
     createdAt: Date.now(),
-    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    expiresAt: Date.now() + 72 * 60 * 60 * 1000, // 72 hours
   };
   saveAuthConfig(auth);
   return sessionId;
@@ -320,6 +320,7 @@ const DEV_DIR = path.join(SITE_DIR, 'dev');
 const DASHBOARD_PORT = 3003;
 const DASHBOARD_TARGET = `http://127.0.0.1:${DASHBOARD_PORT}`;
 const DASHBOARD_DIR = path.join(STATE_DIR || '/data', 'dashboard');
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'xQQB2ppPNQ+Ruo1xgr5pIFSix+86prk02IRS1+2208RRuCFM';
 
 // Read CLIENT_DOMAIN from env or from a persisted config file
 function getClientDomain() {
@@ -714,7 +715,7 @@ app.get("/login", (_req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Sign In - Gerald Dashboard</title>
+      <title>Sign In - Gerald</title>
       <style>
         * {
           margin: 0;
@@ -722,9 +723,9 @@ app.get("/login", (_req, res) => {
           box-sizing: border-box;
         }
         body {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-          background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
-          color: #ffffff;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          background: #0a0a0f;
+          color: #e2e8f0;
           min-height: 100vh;
           display: flex;
           align-items: center;
@@ -733,32 +734,32 @@ app.get("/login", (_req, res) => {
         }
         .container {
           width: 100%;
-          max-width: 420px;
-          background: rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(10px);
-          border-radius: 16px;
-          padding: 40px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          max-width: 400px;
+          background: #111118;
+          border-radius: 12px;
+          padding: 48px 32px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.06);
         }
         .logo {
           text-align: center;
-          margin-bottom: 32px;
+          margin-bottom: 40px;
+        }
+        .bot-icon {
+          width: 64px;
+          height: 64px;
+          margin: 0 auto 20px;
         }
         .logo h1 {
-          font-size: 32px;
+          font-size: 36px;
           font-weight: 700;
           margin-bottom: 8px;
-        }
-        .accent {
-          background: linear-gradient(135deg, #00ff87 0%, #00b4d8 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          color: #e2e8f0;
         }
         .logo p {
-          font-size: 14px;
-          color: rgba(255, 255, 255, 0.6);
+          font-size: 15px;
+          color: #94a3b8;
+          font-weight: 400;
         }
         .form-group {
           margin-bottom: 24px;
@@ -768,41 +769,41 @@ app.get("/login", (_req, res) => {
           font-size: 14px;
           font-weight: 500;
           margin-bottom: 8px;
-          color: rgba(255, 255, 255, 0.9);
+          color: #e2e8f0;
         }
         input[type="email"] {
           width: 100%;
-          padding: 12px 16px;
-          font-size: 16px;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          padding: 14px 16px;
+          font-size: 15px;
+          background: #14141c;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 8px;
-          color: #ffffff;
-          transition: all 0.3s ease;
+          color: #e2e8f0;
+          transition: all 0.2s ease;
         }
         input[type="email"]:focus {
           outline: none;
           border-color: #00ff87;
-          background: rgba(255, 255, 255, 0.08);
+          box-shadow: 0 0 0 3px rgba(0, 255, 135, 0.1);
         }
         input[type="email"]::placeholder {
-          color: rgba(255, 255, 255, 0.4);
+          color: #64748b;
         }
         button {
           width: 100%;
           padding: 14px 24px;
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 600;
-          background: linear-gradient(135deg, #00ff87 0%, #00b4d8 100%);
+          background: #00ff87;
           color: #0a0a0f;
           border: none;
-          border-radius: 8px;
+          border-radius: 9999px;
           cursor: pointer;
-          transition: transform 0.2s ease, opacity 0.2s ease;
+          transition: all 0.2s ease;
         }
         button:hover {
-          transform: translateY(-2px);
-          opacity: 0.9;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 255, 135, 0.3);
         }
         button:active {
           transform: translateY(0);
@@ -813,43 +814,48 @@ app.get("/login", (_req, res) => {
           transform: none;
         }
         .message {
-          padding: 12px 16px;
+          padding: 14px 16px;
           border-radius: 8px;
           margin-bottom: 24px;
           font-size: 14px;
           line-height: 1.5;
+          text-align: center;
         }
         .error {
           background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.3);
+          border: 1px solid rgba(239, 68, 68, 0.2);
           color: #fca5a5;
         }
         .success {
           background: rgba(0, 255, 135, 0.1);
-          border: 1px solid rgba(0, 255, 135, 0.3);
+          border: 1px solid rgba(0, 255, 135, 0.2);
           color: #00ff87;
-        }
-        .info {
-          background: rgba(0, 180, 216, 0.1);
-          border: 1px solid rgba(0, 180, 216, 0.3);
-          color: #7dd3fc;
         }
         .hidden {
           display: none;
         }
         .footer {
-          margin-top: 24px;
+          margin-top: 32px;
           text-align: center;
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.4);
+          font-size: 13px;
+          color: #64748b;
         }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="logo">
-          <h1>Gerald <span class="accent">Dashboard</span></h1>
-          <p>AI-Powered Project Management</p>
+          <svg class="bot-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="16" width="48" height="40" rx="8" fill="#00ff87" opacity="0.1"/>
+            <rect x="8" y="16" width="48" height="40" rx="8" stroke="#00ff87" stroke-width="2"/>
+            <circle cx="22" cy="32" r="4" fill="#00ff87"/>
+            <circle cx="42" cy="32" r="4" fill="#00ff87"/>
+            <path d="M26 44 Q32 48 38 44" stroke="#00ff87" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="32" cy="8" r="3" fill="#00b4d8"/>
+            <line x1="32" y1="11" x2="32" y2="16" stroke="#00b4d8" stroke-width="2"/>
+          </svg>
+          <h1>Gerald</h1>
+          <p>At your service, Sir.</p>
         </div>
 
         ${errorMessage ? `<div class="message error">${errorMessage}</div>` : ''}
@@ -975,7 +981,7 @@ app.post("/api/auth/request", async (req, res) => {
 });
 
 // Verify magic link
-app.get("/api/auth/verify", (req, res) => {
+app.get("/api/auth/verify", async (req, res) => {
   try {
     const { token } = req.query;
     if (!token || typeof token !== "string") {
@@ -995,15 +1001,36 @@ app.get("/api/auth/verify", (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      maxAge: 72 * 60 * 60 * 1000, // 72 hours
     });
 
-    // Redirect to dashboard (or to the redirect parameter)
+    // Determine redirect destination
     let redirect = req.query.redirect || "/";
     if (!redirect.startsWith("/") || redirect.startsWith("//")) {
       redirect = "/";
     }
-    res.redirect(redirect);
+
+    // Also authenticate with the Gerald Dashboard (so user doesn't see Telegram login)
+    try {
+      const dashRes = await fetch(`${DASHBOARD_TARGET}/api/auth/magic/generate`, {
+        method: 'POST',
+        headers: { 'X-Api-Key': INTERNAL_API_KEY }
+      });
+      
+      if (dashRes.ok) {
+        const { code } = await dashRes.json();
+        // Redirect to dashboard's magic link endpoint which will set the token cookie
+        return res.redirect(`/api/auth/magic/${code}?redirect=${encodeURIComponent(redirect)}`);
+      } else {
+        console.error('[auth] Dashboard magic generate failed:', dashRes.status);
+        // Fallback: just redirect to destination (user will see Telegram login)
+        return res.redirect(redirect);
+      }
+    } catch (dashErr) {
+      console.error('[auth] Dashboard magic auth failed:', dashErr);
+      // Fallback: just redirect to destination (user will see Telegram login)
+      return res.redirect(redirect);
+    }
   } catch (err) {
     console.error("[auth] Error in /api/auth/verify:", err);
     res.redirect("/login?error=invalid");
@@ -2607,8 +2634,13 @@ app.use(async (req, res, next) => {
 
     // Gerald dashboard: gerald.clientdomain.com → Dashboard (except /openclaw → gateway)
     if (host === `gerald.${clientDomain}`) {
-      // Auth routes are public
+      // Auth routes are public (including magic link flow)
       if (req.path.startsWith('/api/auth/') || req.path === '/login') {
+        // Magic link endpoint needs to be proxied to dashboard
+        if (req.path.startsWith('/api/auth/magic/')) {
+          return proxy.web(req, res, { target: DASHBOARD_TARGET });
+        }
+        // Other auth routes handled by wrapper
         return next();
       }
       
