@@ -12,6 +12,8 @@
     "smoke": "node scripts/smoke.js"
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.4",
+    "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
     "http-proxy": "^1.18.1",
     "tar": "^7.5.4"

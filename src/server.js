@@ -4,8 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import cookieParser from "cookie-parser";
 import express from "express";
 import httpProxy from "http-proxy";
+import sendgrid from "@sendgrid/mail";
 import * as tar from "tar";
 
 // Restore Claude Code from persistent volume on container restart.
@@ -68,6 +70,236 @@ const STATE_DIR =
 const WORKSPACE_DIR =
   process.env.OPENCLAW_WORKSPACE_DIR?.trim() ||
   path.join(STATE_DIR, "workspace");
+
+// ── Auth Management ───────────────────────────────────────────────────────
+// Magic link authentication with SendGrid
+
+function getAuthConfig() {
+  try {
+    const authPath = path.join(STATE_DIR, "auth.json");
+    if (fs.existsSync(authPath)) {
+      return JSON.parse(fs.readFileSync(authPath, "utf8"));
+    }
+  } catch (err) {
+    console.error("[auth] Failed to read auth.json:", err);
+  }
+  return { allowedEmails: [], sessions: {}, magicLinks: {} };
+}
+
+function saveAuthConfig(config) {
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(
+      path.join(STATE_DIR, "auth.json"),
+      JSON.stringify(config, null, 2),
+      { mode: 0o600 }
+    );
+  } catch (err) {
+    console.error("[auth] Failed to save auth.json:", err);
+  }
+}
+
+function getSendGridConfig() {
+  try {
+    const sgPath = path.join(STATE_DIR, "sendgrid.json");
+    if (fs.existsSync(sgPath)) {
+      return JSON.parse(fs.readFileSync(sgPath, "utf8"));
+    }
+  } catch (err) {
+    console.error("[auth] Failed to read sendgrid.json:", err);
+  }
+  return null;
+}
+
+function isEmailAllowed(email) {
+  const auth = getAuthConfig();
+  const normalizedEmail = email.toLowerCase().trim();
+  return auth.allowedEmails.some(
+    (allowed) => allowed.toLowerCase().trim() === normalizedEmail
+  );
+}
+
+function generateMagicToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function storeMagicLink(email, token) {
+  const auth = getAuthConfig();
+  if (!auth.magicLinks) auth.magicLinks = {};
+  auth.magicLinks[token] = {
+    email: email.toLowerCase().trim(),
+    expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes
+    createdAt: Date.now(),
+  };
+  // Clean up expired tokens (older than 1 hour)
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  for (const [key, value] of Object.entries(auth.magicLinks)) {
+    if (value.expiresAt < oneHourAgo) {
+      delete auth.magicLinks[key];
+    }
+  }
+  saveAuthConfig(auth);
+}
+
+function verifyMagicLink(token) {
+  const auth = getAuthConfig();
+  if (!auth.magicLinks) return null;
+  const link = auth.magicLinks[token];
+  if (!link) return null;
+  if (Date.now() > link.expiresAt) {
+    delete auth.magicLinks[token];
+    saveAuthConfig(auth);
+    return null;
+  }
+  // Consume the token (one-time use)
+  delete auth.magicLinks[token];
+  saveAuthConfig(auth);
+  return link.email;
+}
+
+function createSession(email) {
+  const auth = getAuthConfig();
+  if (!auth.sessions) auth.sessions = {};
+  const sessionId = crypto.randomBytes(32).toString("hex");
+  auth.sessions[sessionId] = {
+    email: email.toLowerCase().trim(),
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+  };
+  saveAuthConfig(auth);
+  return sessionId;
+}
+
+function getSession(sessionId) {
+  if (!sessionId) return null;
+  const auth = getAuthConfig();
+  if (!auth.sessions) return null;
+  const session = auth.sessions[sessionId];
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    delete auth.sessions[sessionId];
+    saveAuthConfig(auth);
+    return null;
+  }
+  return session;
+}
+
+function deleteSession(sessionId) {
+  const auth = getAuthConfig();
+  if (!auth.sessions) return;
+  delete auth.sessions[sessionId];
+  saveAuthConfig(auth);
+}
+
+async function sendMagicLinkEmail(email, token, host) {
+  const sgConfig = getSendGridConfig();
+  if (!sgConfig || !sgConfig.apiKey || !sgConfig.senderEmail) {
+    throw new Error("SendGrid not configured");
+  }
+
+  sendgrid.setApiKey(sgConfig.apiKey);
+
+  const magicLink = `https://${host}/api/auth/verify?token=${token}`;
+
+  const msg = {
+    to: email,
+    from: sgConfig.senderEmail,
+    subject: "Your Gerald Login Link",
+    text: `Click this link to log in to Gerald Dashboard:\n\n${magicLink}\n\nThis link expires in 15 minutes.\n\nIf you didn't request this, please ignore this email.`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+          }
+          .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .header h1 {
+            color: #0a0a0f;
+            font-size: 24px;
+            margin: 0;
+          }
+          .accent {
+            color: #00ff87;
+          }
+          .button {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #00ff87 0%, #00b4d8 100%);
+            color: #0a0a0f;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+            margin: 20px 0;
+          }
+          .button:hover {
+            opacity: 0.9;
+          }
+          .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+          }
+          .expiry {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin: 20px 0;
+            font-size: 14px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Gerald <span class="accent">Dashboard</span></h1>
+          </div>
+          <p>Hi there!</p>
+          <p>You requested a login link for the Gerald Dashboard. Click the button below to sign in:</p>
+          <p style="text-align: center;">
+            <a href="${magicLink}" class="button">Sign In to Gerald</a>
+          </p>
+          <div class="expiry">
+            ⏰ This link expires in <strong>15 minutes</strong> and can only be used once.
+          </div>
+          <p>If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; font-size: 12px; background-color: #f5f5f5; padding: 10px; border-radius: 4px;">
+            ${magicLink}
+          </p>
+          <div class="footer">
+            <p>If you didn't request this login link, you can safely ignore this email.</p>
+            <p>Gerald Dashboard • Powered by OpenClaw</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  await sendgrid.send(msg);
+}
 
 // Illumin8 site directories
 const SITE_DIR = path.join(WORKSPACE_DIR, 'site');
@@ -397,9 +629,29 @@ function requireSetupAuth(req, res, next) {
   return next();
 }
 
+// Auth middleware for dashboard and API routes
+function requireAuth(req, res, next) {
+  const sessionId = req.cookies.gerald_session;
+  const session = getSession(sessionId);
+
+  if (!session) {
+    // For API calls, return 401
+    if (req.path.startsWith("/api/") && !req.path.startsWith("/api/auth/")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    // For HTML pages, redirect to login
+    return res.redirect(`/login?redirect=${encodeURIComponent(req.originalUrl)}`);
+  }
+
+  // Attach user info to request
+  req.user = { email: session.email };
+  return next();
+}
+
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
 
 // Minimal health endpoint for Railway.
 app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
@@ -420,6 +672,340 @@ app.get("/setup/styles.css", requireSetupAuth, (_req, res) => {
 app.get("/setup", requireSetupAuth, (_req, res) => {
   res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   res.sendFile(path.join(process.cwd(), "src", "public", "setup.html"));
+});
+
+// ── Auth Endpoints ─────────────────────────────────────────────────────────
+
+// Login page
+app.get("/login", (_req, res) => {
+  const error = res.req.query?.error;
+  const errorMessage = error === "expired" 
+    ? "Your login link has expired. Please request a new one."
+    : error === "invalid"
+    ? "Invalid login link. Please request a new one."
+    : "";
+
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.type("text/html");
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Sign In - Gerald Dashboard</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+          color: #ffffff;
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .container {
+          width: 100%;
+          max-width: 420px;
+          background: rgba(255, 255, 255, 0.05);
+          backdrop-filter: blur(10px);
+          border-radius: 16px;
+          padding: 40px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .logo {
+          text-align: center;
+          margin-bottom: 32px;
+        }
+        .logo h1 {
+          font-size: 32px;
+          font-weight: 700;
+          margin-bottom: 8px;
+        }
+        .accent {
+          background: linear-gradient(135deg, #00ff87 0%, #00b4d8 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .logo p {
+          font-size: 14px;
+          color: rgba(255, 255, 255, 0.6);
+        }
+        .form-group {
+          margin-bottom: 24px;
+        }
+        label {
+          display: block;
+          font-size: 14px;
+          font-weight: 500;
+          margin-bottom: 8px;
+          color: rgba(255, 255, 255, 0.9);
+        }
+        input[type="email"] {
+          width: 100%;
+          padding: 12px 16px;
+          font-size: 16px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          color: #ffffff;
+          transition: all 0.3s ease;
+        }
+        input[type="email"]:focus {
+          outline: none;
+          border-color: #00ff87;
+          background: rgba(255, 255, 255, 0.08);
+        }
+        input[type="email"]::placeholder {
+          color: rgba(255, 255, 255, 0.4);
+        }
+        button {
+          width: 100%;
+          padding: 14px 24px;
+          font-size: 16px;
+          font-weight: 600;
+          background: linear-gradient(135deg, #00ff87 0%, #00b4d8 100%);
+          color: #0a0a0f;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+        button:hover {
+          transform: translateY(-2px);
+          opacity: 0.9;
+        }
+        button:active {
+          transform: translateY(0);
+        }
+        button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+        .message {
+          padding: 12px 16px;
+          border-radius: 8px;
+          margin-bottom: 24px;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+        .error {
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          color: #fca5a5;
+        }
+        .success {
+          background: rgba(0, 255, 135, 0.1);
+          border: 1px solid rgba(0, 255, 135, 0.3);
+          color: #00ff87;
+        }
+        .info {
+          background: rgba(0, 180, 216, 0.1);
+          border: 1px solid rgba(0, 180, 216, 0.3);
+          color: #7dd3fc;
+        }
+        .hidden {
+          display: none;
+        }
+        .footer {
+          margin-top: 24px;
+          text-align: center;
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.4);
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="logo">
+          <h1>Gerald <span class="accent">Dashboard</span></h1>
+          <p>AI-Powered Project Management</p>
+        </div>
+
+        ${errorMessage ? `<div class="message error">${errorMessage}</div>` : ''}
+        
+        <div id="successMessage" class="message success hidden">
+          ✓ Check your email for a login link!
+        </div>
+
+        <div id="errorMessage" class="message error hidden"></div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="email">Email Address</label>
+            <input 
+              type="email" 
+              id="email" 
+              name="email" 
+              placeholder="you@example.com" 
+              required 
+              autocomplete="email"
+              autofocus
+            />
+          </div>
+          <button type="submit" id="submitBtn">
+            Send Magic Link
+          </button>
+        </form>
+
+        <div class="footer">
+          Powered by OpenClaw
+        </div>
+      </div>
+
+      <script>
+        const form = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const submitBtn = document.getElementById('submitBtn');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          
+          const email = emailInput.value.trim();
+          if (!email) return;
+
+          // Disable form
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Sending...';
+          successMessage.classList.add('hidden');
+          errorMessage.classList.add('hidden');
+
+          try {
+            const response = await fetch('/api/auth/request', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+              successMessage.classList.remove('hidden');
+              emailInput.value = '';
+              submitBtn.textContent = 'Link Sent!';
+              setTimeout(() => {
+                submitBtn.textContent = 'Send Magic Link';
+                submitBtn.disabled = false;
+              }, 3000);
+            } else {
+              errorMessage.textContent = data.error || 'Failed to send login link';
+              errorMessage.classList.remove('hidden');
+              submitBtn.textContent = 'Send Magic Link';
+              submitBtn.disabled = false;
+            }
+          } catch (error) {
+            errorMessage.textContent = 'Network error. Please try again.';
+            errorMessage.classList.remove('hidden');
+            submitBtn.textContent = 'Send Magic Link';
+            submitBtn.disabled = false;
+          }
+        });
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Request magic link
+app.post("/api/auth/request", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if email is allowed (but don't reveal this in the response)
+    if (isEmailAllowed(normalizedEmail)) {
+      const token = generateMagicToken();
+      storeMagicLink(normalizedEmail, token);
+
+      // Get the host for the magic link
+      const host = req.get("host") || req.hostname || "localhost";
+
+      try {
+        await sendMagicLinkEmail(normalizedEmail, token, host);
+      } catch (err) {
+        console.error("[auth] Failed to send magic link email:", err);
+        return res.status(500).json({ error: "Failed to send email" });
+      }
+    }
+
+    // Always return success to avoid leaking which emails are valid
+    res.json({
+      message: "If your email is registered, you'll receive a login link",
+    });
+  } catch (err) {
+    console.error("[auth] Error in /api/auth/request:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Verify magic link
+app.get("/api/auth/verify", (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token || typeof token !== "string") {
+      return res.redirect("/login?error=invalid");
+    }
+
+    const email = verifyMagicLink(token);
+    if (!email) {
+      return res.redirect("/login?error=expired");
+    }
+
+    // Create session
+    const sessionId = createSession(email);
+
+    // Set session cookie
+    res.cookie("gerald_session", sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    });
+
+    // Redirect to dashboard (or to the redirect parameter)
+    const redirect = req.query.redirect || "/";
+    res.redirect(redirect);
+  } catch (err) {
+    console.error("[auth] Error in /api/auth/verify:", err);
+    res.redirect("/login?error=invalid");
+  }
+});
+
+// Logout
+app.get("/api/auth/logout", (req, res) => {
+  const sessionId = req.cookies.gerald_session;
+  if (sessionId) {
+    deleteSession(sessionId);
+  }
+  res.clearCookie("gerald_session");
+  res.redirect("/login");
+});
+
+// Check auth status
+app.get("/api/auth/me", (req, res) => {
+  const sessionId = req.cookies.gerald_session;
+  const session = getSession(sessionId);
+
+  if (!session) {
+    return res.status(401).json({ error: "Not authenticated" });
+  }
+
+  res.json({ email: session.email });
 });
 
 app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
@@ -534,6 +1120,10 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     },
   ];
 
+  // Check SendGrid configuration
+  const sendgridConfig = getSendGridConfig();
+  const authConfig = getAuthConfig();
+
   res.json({
     configured: isConfigured(),
     gatewayTarget: GATEWAY_TARGET,
@@ -547,6 +1137,8 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     defaultModel: process.env.DEFAULT_MODEL || null,
     defaultClientDomain: process.env.CLIENT_DOMAIN?.trim() || null,
     cloudflareConfigured: !!(process.env.CLOUDFLARE_API_KEY?.trim() && process.env.CLOUDFLARE_EMAIL?.trim()),
+    sendgridConfigured: !!(sendgridConfig?.apiKey && sendgridConfig?.senderEmail),
+    authConfigured: !!(authConfig?.allowedEmails?.length > 0),
   });
 });
 
@@ -1314,6 +1906,42 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         }
       }
 
+      // ── SendGrid configuration ─────────────────────────────────────────────
+      if (payload.sendgridApiKey?.trim() && payload.sendgridSenderEmail?.trim()) {
+        const sendgridConfig = {
+          apiKey: payload.sendgridApiKey.trim(),
+          senderEmail: payload.sendgridSenderEmail.trim(),
+        };
+        fs.writeFileSync(
+          path.join(STATE_DIR, 'sendgrid.json'),
+          JSON.stringify(sendgridConfig, null, 2),
+          { mode: 0o600 }
+        );
+        extra += `\n[sendgrid] Configuration saved\n`;
+      }
+
+      // ── Auth configuration ──────────────────────────────────────────────────
+      if (payload.allowedEmails?.trim()) {
+        const emails = payload.allowedEmails
+          .split(/[\n,]/)
+          .map(e => e.trim())
+          .filter(e => e && e.includes('@'));
+        
+        if (emails.length > 0) {
+          const authConfig = {
+            allowedEmails: emails,
+            sessions: {},
+            magicLinks: {},
+          };
+          fs.writeFileSync(
+            path.join(STATE_DIR, 'auth.json'),
+            JSON.stringify(authConfig, null, 2),
+            { mode: 0o600 }
+          );
+          extra += `\n[auth] Allowed emails configured: ${emails.join(', ')}\n`;
+        }
+      }
+
       // ── Services configuration ───────────────────────────────────────────
       const servicesConfig = {};
       if (payload.sendgridKey?.trim()) servicesConfig.sendgridKey = payload.sendgridKey.trim();
@@ -1661,16 +2289,37 @@ app.use(async (req, res) => {
 
     // Gerald dashboard: gerald.clientdomain.com → Dashboard (except /openclaw → gateway)
     if (host === `gerald.${clientDomain}`) {
+      // Auth routes are public
+      if (req.path.startsWith('/api/auth/') || req.path === '/login') {
+        return next();
+      }
+      
       if (req.path.startsWith('/openclaw')) {
-        // Proxy /openclaw paths to OpenClaw gateway (dashboard API calls)
+        // Proxy /openclaw paths to OpenClaw gateway (dashboard API calls) - requires auth
         if (isConfigured()) {
           try { await ensureGatewayRunning(); } catch (err) {
             return res.status(503).type('text/plain').send(`Gateway not ready: ${String(err)}`);
           }
         }
+        // Check auth before proxying to gateway
+        const sessionId = req.cookies.gerald_session;
+        const session = getSession(sessionId);
+        if (!session) {
+          return req.path.includes('api') 
+            ? res.status(401).json({ error: 'Unauthorized' })
+            : res.redirect('/login');
+        }
         return proxy.web(req, res, { target: GATEWAY_TARGET });
       }
-      // Everything else → Gerald Dashboard
+      
+      // Everything else → Gerald Dashboard (requires auth)
+      const sessionId = req.cookies.gerald_session;
+      const session = getSession(sessionId);
+      if (!session) {
+        return req.path.startsWith('/api/')
+          ? res.status(401).json({ error: 'Unauthorized' })
+          : res.redirect('/login');
+      }
       return proxy.web(req, res, { target: DASHBOARD_TARGET });
     }
 

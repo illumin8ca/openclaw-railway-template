@@ -115,13 +115,38 @@
   </div>
 
   <div class="card">
-    <h2>4) Services (Optional)</h2>
-    <p class="muted">Configure email, SMS, and form protection. These can also be set up later.</p>
+    <h2>4) Dashboard Authentication</h2>
+    <p class="muted">Configure magic link authentication for the Gerald Dashboard via SendGrid.</p>
 
     <label>SendGrid API Key</label>
+    <input id="sendgridApiKey" type="password" placeholder="SG.xxx" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Required for magic link login emails.
+      <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">Get your key →</a>
+    </div>
+
+    <label>SendGrid Sender Email</label>
+    <input id="sendgridSenderEmail" type="email" placeholder="noreply@yourdomain.com" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Must be verified in SendGrid. This is the "From" address for login emails.
+    </div>
+
+    <label>Allowed Emails</label>
+    <textarea id="allowedEmails" rows="3" placeholder="andy@illumin8.ca
+admin@yourdomain.com" style="font-family: monospace; width: 100%;"></textarea>
+    <div class="muted" style="margin-top: 0.25rem">
+      One email per line. Only these emails can access the dashboard.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>5) Services (Optional)</h2>
+    <p class="muted">Configure email and SMS for contact forms. These can also be set up later.</p>
+
+    <label>SendGrid API Key (Contact Forms)</label>
     <input id="sendgridKey" type="password" placeholder="SG.xxx" />
     <div class="muted" style="margin-top: 0.25rem">
-      For contact form email notifications.
+      For contact form email notifications (separate from dashboard auth).
       <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">Get your key →</a>
     </div>
 
@@ -147,7 +172,7 @@
   </div>
 
   <div class="card">
-    <h2>5) Run onboarding</h2>
+    <h2>6) Run onboarding</h2>
     <button id="run">Run setup</button>
     <button id="pairingApprove" class="secondary-button">Approve pairing</button>
     <button id="reset" class="tertiary-button">Reset setup</button>
