@@ -1,11 +1,47 @@
-// Served at /setup/app.js
-// No fancy syntax: keep it maximally compatible.
+// Gerald Setup - Enhanced UX with skeleton loaders and collapsible sections
+// Preserves all original functionality
 
 (function () {
   var statusEl = document.getElementById('status');
   var authGroupEl = document.getElementById('authGroup');
   var authChoiceEl = document.getElementById('authChoice');
   var logEl = document.getElementById('log');
+
+  // Initialize collapsible sections
+  function initCollapsibles() {
+    var headers = document.querySelectorAll('.card-header-collapsible');
+    headers.forEach(function(header) {
+      header.addEventListener('click', function() {
+        var targetId = this.getAttribute('data-target');
+        var content = document.getElementById(targetId);
+        
+        if (content) {
+          var isCollapsed = content.classList.contains('collapsed');
+          
+          if (isCollapsed) {
+            content.classList.remove('collapsed');
+            this.classList.add('active');
+          } else {
+            content.classList.add('collapsed');
+            this.classList.remove('active');
+          }
+        }
+      });
+    });
+  }
+
+  // Show skeleton loaders
+  function showSkeletons() {
+    statusEl.innerHTML = '<div class="skeleton skeleton-text"></div>';
+    authGroupEl.innerHTML = '<option value="">Loading...</option>';
+    authChoiceEl.innerHTML = '<option value="">Loading...</option>';
+  }
+
+  // Hide skeleton loaders
+  function hideSkeletons() {
+    // Status will be updated by setStatus
+    // Auth dropdowns will be populated by renderAuth
+  }
 
   function setStatus(s) {
     statusEl.textContent = s;
@@ -54,8 +90,12 @@
   }
 
   function refreshStatus() {
+    showSkeletons();
     setStatus('Loading...');
+    
     return httpJson('/setup/api/status').then(function (j) {
+      hideSkeletons();
+      
       var ver = j.openclawVersion ? (' | ' + j.openclawVersion) : '';
       setStatus((j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below') + ver);
       renderAuth(j.authGroups || []);
@@ -98,6 +138,7 @@
       }
 
     }).catch(function (e) {
+      hideSkeletons();
       setStatus('Error: ' + String(e));
     });
   }
@@ -130,6 +171,9 @@
     };
 
     logEl.textContent = 'Running...\n';
+    
+    // Auto-scroll log output
+    logEl.scrollTop = logEl.scrollHeight;
 
     fetch('/setup/api/run', {
       method: 'POST',
@@ -142,9 +186,11 @@
       var j;
       try { j = JSON.parse(text); } catch (_e) { j = { ok: false, output: text }; }
       logEl.textContent += (j.output || JSON.stringify(j, null, 2));
+      logEl.scrollTop = logEl.scrollHeight;
       return refreshStatus();
     }).catch(function (e) {
       logEl.textContent += '\nError: ' + String(e) + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
     });
   };
 
@@ -168,8 +214,14 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ channel: channel, code: code.trim() })
       }).then(function (r) { return r.text(); })
-        .then(function (t) { logEl.textContent += t + '\n'; })
-        .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
+        .then(function (t) { 
+          logEl.textContent += t + '\n';
+          logEl.scrollTop = logEl.scrollHeight;
+        })
+        .catch(function (e) { 
+          logEl.textContent += 'Error: ' + String(e) + '\n';
+          logEl.scrollTop = logEl.scrollHeight;
+        });
     };
   }
 
@@ -178,11 +230,18 @@
     logEl.textContent = 'Resetting...\n';
     fetch('/setup/api/reset', { method: 'POST', credentials: 'same-origin' })
       .then(function (res) { return res.text(); })
-      .then(function (t) { logEl.textContent += t + '\n'; return refreshStatus(); })
-      .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
+      .then(function (t) { 
+        logEl.textContent += t + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+        return refreshStatus();
+      })
+      .catch(function (e) { 
+        logEl.textContent += 'Error: ' + String(e) + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+      });
   };
 
-  // GitHub token save handler
+  // GitHub token save handler with enhanced UX
   var githubTokenSaveBtn = document.getElementById('githubTokenSave');
   var githubRepoSelect = document.getElementById('githubRepo');
   var githubTokenStatus = document.getElementById('githubTokenStatus');
@@ -196,11 +255,12 @@
       }
 
       githubTokenSaveBtn.disabled = true;
-      githubTokenSaveBtn.textContent = 'Validating...';
+      githubTokenSaveBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="animation: spin 1s linear infinite;"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" stroke-dasharray="10 5"/></svg> Validating...';
       githubRepoSelect.innerHTML = '<option value="">Loading repos...</option>';
       githubRepoSelect.disabled = true;
+      
       if (githubTokenStatus) {
-        githubTokenStatus.textContent = 'Validating token...';
+        githubTokenStatus.innerHTML = '<div class="skeleton skeleton-text" style="width: 100%; height: 16px; margin-top: 4px;"></div>';
         githubTokenStatus.style.color = '#8892b0';
       }
 
@@ -248,8 +308,11 @@
           return fetchAllPages(1);
         })
         .then(function(repos) {
-          githubTokenSaveBtn.textContent = '✓ Saved';
+          githubTokenSaveBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Saved';
           githubTokenSaveBtn.style.background = '#22c55e';
+          githubTokenSaveBtn.style.borderColor = '#22c55e';
+          githubTokenSaveBtn.style.color = '#0a0a0f';
+          
           if (githubTokenStatus) {
             githubTokenStatus.innerHTML = '✓ Token validated — ' + repos.length + ' repos found';
             githubTokenStatus.style.color = '#22c55e';
@@ -268,16 +331,21 @@
 
           // Reset button after 3s
           setTimeout(function() {
-            githubTokenSaveBtn.textContent = 'Save Token';
+            githubTokenSaveBtn.innerHTML = 'Save Token';
             githubTokenSaveBtn.style.background = '';
+            githubTokenSaveBtn.style.borderColor = '';
+            githubTokenSaveBtn.style.color = '';
             githubTokenSaveBtn.disabled = false;
           }, 3000);
         })
         .catch(function(err) {
-          githubTokenSaveBtn.textContent = 'Save Token';
+          githubTokenSaveBtn.innerHTML = 'Save Token';
           githubTokenSaveBtn.style.background = '';
+          githubTokenSaveBtn.style.borderColor = '';
+          githubTokenSaveBtn.style.color = '';
           githubTokenSaveBtn.disabled = false;
           githubRepoSelect.innerHTML = '<option value="">Save token first...</option>';
+          
           if (githubTokenStatus) {
             githubTokenStatus.innerHTML = '✗ ' + err.message;
             githubTokenStatus.style.color = '#ef4444';
@@ -286,5 +354,12 @@
     };
   }
 
+  // Add CSS for spin animation
+  var style = document.createElement('style');
+  style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+  document.head.appendChild(style);
+
+  // Initialize everything
+  initCollapsibles();
   refreshStatus();
 })();

@@ -1,185 +1,350 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Openclaw Setup</title>
+  <title>Gerald Setup</title>
   <link rel="stylesheet" href="/setup/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <h1>Openclaw Setup</h1>
-  <p class="muted">This wizard configures Openclaw by running the same onboarding command it uses in the terminal, but from the browser.</p>
-
-  <div class="card">
-    <h2>Status</h2>
-    <div id="status">Loading...</div>
-    <div style="margin-top: 0.75rem">
-      <a href="/openclaw" target="_blank">Open Openclaw UI</a>
-      &nbsp;|&nbsp;
-      <a href="/setup/export" target="_blank">Download backup (.tar.gz)</a>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>1) Model/auth provider</h2>
-    <p class="muted">Matches the groups shown in the terminal onboarding.</p>
-    <label>Provider group</label>
-    <select id="authGroup"></select>
-
-    <label>Auth method</label>
-    <select id="authChoice"></select>
-
-    <label>Key / Token (if required)</label>
-    <input id="authSecret" type="password" placeholder="Paste API key / token if applicable" />
-
-    <label>Wizard flow</label>
-    <select id="flow">
-      <option value="quickstart">quickstart</option>
-      <option value="advanced">advanced</option>
-      <option value="manual">manual</option>
-    </select>
-  </div>
-
-  <div class="card">
-    <h2>2) Optional: Channels</h2>
-    <p class="muted">You can also add channels later inside Openclaw, but this helps you get messaging working immediately.</p>
-
-    <label>Telegram bot token (optional)</label>
-    <input id="telegramToken" type="password" placeholder="123456:ABC..." />
-    <div class="muted" style="margin-top: 0.25rem">
-      Get it from BotFather: open Telegram, message <code>@BotFather</code>, run <code>/newbot</code>, then copy the token.
-    </div>
-
-    <label>Discord bot token (optional)</label>
-    <input id="discordToken" type="password" placeholder="Bot token" />
-    <div class="muted" style="margin-top: 0.25rem">
-      Get it from the Discord Developer Portal: create an application, add a Bot, then copy the Bot Token.<br/>
-      <strong>Important:</strong> Enable <strong>MESSAGE CONTENT INTENT</strong> in Bot → Privileged Gateway Intents, or the bot will crash on startup.
-    </div>
-
-    <label>Slack bot token (optional)</label>
-    <input id="slackBotToken" type="password" placeholder="xoxb-..." />
-
-    <label>Slack app token (optional)</label>
-    <input id="slackAppToken" type="password" placeholder="xapp-..." />
-  </div>
-
-  <div class="card">
-    <h2>3) Client Configuration</h2>
-    <p class="muted">Configure this deployment for a specific client website.</p>
-
-    <label>Client Domain</label>
-    <input id="clientDomain" type="text" placeholder="example.com" />
-    <div class="muted" style="margin-top: 0.25rem">
-      The client's primary domain. This will configure routing for:<br/>
-      <code>clientdomain.com</code> (production) &middot;
-      <code>dev.clientdomain.com</code> (staging) &middot;
-      <code>gerald.clientdomain.com</code> (chat)<br/>
-      <strong>Auto-configured:</strong> DNS records (Cloudflare) &middot; Turnstile CAPTCHA keys
-    </div>
-
-    <label>Client Name</label>
-    <input id="clientName" type="text" placeholder="Client Name" />
-
-    <label>Guardrail Level</label>
-    <select id="guardrailLevel">
-      <option value="standard">Standard (text + images only)</option>
-      <option value="admin">Admin (create/delete pages, limited design)</option>
-    </select>
-
-    <label>GitHub Personal Access Token (fine-grained)</label>
-    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
-      <input id="githubToken" type="password" placeholder="github_pat_..." style="flex: 1;" />
-      <button type="button" id="githubTokenSave" style="white-space: nowrap; padding: 0.6rem 1rem; margin: 0;">Save Token</button>
-    </div>
-    <div id="githubTokenStatus" class="muted" style="margin-top: 0.25rem">
-      Fine-grained PAT with Contents:Read permission.
-      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Create one →</a>
-    </div>
-
-    <label>Repository</label>
-    <select id="githubRepo" disabled style="margin-top: 0.25rem;">
-      <option value="">Save token first...</option>
-    </select>
-
-    <div style="display: flex; gap: 1rem; margin-top: 0;">
-      <div style="flex: 1;">
-        <label>Production Branch</label>
-        <input id="prodBranch" type="text" placeholder="main" value="main" />
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-icon">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="24" r="20" stroke="#00ff87" stroke-width="2" fill="none"/>
+          <circle cx="17" cy="20" r="2" fill="#00ff87"/>
+          <circle cx="31" cy="20" r="2" fill="#00ff87"/>
+          <path d="M16 28 Q24 32 32 28" stroke="#00ff87" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M12 12 L18 8 M30 8 L36 12" stroke="#00ff87" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="24" cy="4" r="2" fill="#00ff87"/>
+        </svg>
       </div>
-      <div style="flex: 1;">
-        <label>Development Branch</label>
-        <input id="devBranch" type="text" placeholder="development" value="development" />
+      <h1 class="header-title">Gerald Setup</h1>
+      <p class="header-subtitle">Configure your AI assistant</p>
+    </header>
+
+    <!-- Status Card -->
+    <div class="card card-fade-in" style="animation-delay: 0.1s">
+      <div class="card-header">
+        <div class="step-badge">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="9" stroke="#00ff87" stroke-width="1.5"/>
+            <path d="M7 10l2 2 4-4" stroke="#00ff87" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2>Status</h2>
+      </div>
+      <div class="status-content">
+        <div id="status" class="status-text">
+          <div class="skeleton skeleton-text"></div>
+        </div>
+        <div class="status-links">
+          <a href="/openclaw" target="_blank" class="status-link">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Open Dashboard
+          </a>
+          <span class="link-divider">•</span>
+          <a href="/setup/export" target="_blank" class="status-link">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v8m0 0l-3-3m3 3l3-3M3 14h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Download Backup
+          </a>
+        </div>
       </div>
     </div>
+
+    <!-- Step 1: Model/Auth Provider -->
+    <div class="card card-fade-in" style="animation-delay: 0.2s">
+      <div class="card-header">
+        <div class="step-badge step-number">①</div>
+        <h2>Model & Authentication</h2>
+      </div>
+      <p class="card-description">Configure your AI model provider and authentication method</p>
+      
+      <div class="form-group">
+        <label for="authGroup">Provider Group</label>
+        <div class="select-wrapper">
+          <select id="authGroup" class="input-field">
+            <div class="skeleton skeleton-select"></div>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="authChoice">Auth Method</label>
+        <div class="select-wrapper">
+          <select id="authChoice" class="input-field">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="authSecret">API Key / Token</label>
+        <input id="authSecret" type="password" class="input-field" placeholder="Paste your API key or token if required" />
+      </div>
+
+      <div class="form-group">
+        <label for="flow">Wizard Flow</label>
+        <div class="select-wrapper">
+          <select id="flow" class="input-field">
+            <option value="quickstart">Quickstart (recommended)</option>
+            <option value="advanced">Advanced</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Channels (Collapsible) -->
+    <div class="card card-fade-in" style="animation-delay: 0.3s">
+      <div class="card-header card-header-collapsible" data-target="channels-content">
+        <div class="step-badge step-number">②</div>
+        <h2>Message Channels</h2>
+        <span class="optional-badge">Optional</span>
+        <button type="button" class="collapse-toggle" aria-label="Toggle section">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div id="channels-content" class="collapsible-content collapsed">
+        <p class="card-description">Connect messaging platforms for bot communication</p>
+        
+        <div class="form-group">
+          <label for="telegramToken">Telegram Bot Token</label>
+          <input id="telegramToken" type="password" class="input-field" placeholder="123456:ABC..." />
+          <p class="field-hint">
+            Get it from <code>@BotFather</code>: open Telegram, message <code>@BotFather</code>, run <code>/newbot</code>, then copy the token.
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="discordToken">Discord Bot Token</label>
+          <input id="discordToken" type="password" class="input-field" placeholder="Bot token" />
+          <p class="field-hint">
+            Create at <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a><br/>
+            <strong>⚠️ Important:</strong> Enable <strong>MESSAGE CONTENT INTENT</strong> in Bot → Privileged Gateway Intents
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="slackBotToken">Slack Bot Token</label>
+          <input id="slackBotToken" type="password" class="input-field" placeholder="xoxb-..." />
+        </div>
+
+        <div class="form-group">
+          <label for="slackAppToken">Slack App Token</label>
+          <input id="slackAppToken" type="password" class="input-field" placeholder="xapp-..." />
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Client Configuration -->
+    <div class="card card-fade-in" style="animation-delay: 0.4s">
+      <div class="card-header">
+        <div class="step-badge step-number">③</div>
+        <h2>Client Configuration</h2>
+      </div>
+      <p class="card-description">Configure this deployment for a specific client website</p>
+      
+      <div class="form-group">
+        <label for="clientDomain">Client Domain</label>
+        <input id="clientDomain" type="text" class="input-field" placeholder="example.com" />
+        <p class="field-hint">
+          The client's primary domain. Auto-configures routing for:<br/>
+          <code>clientdomain.com</code> (production) • <code>dev.clientdomain.com</code> (staging) • <code>gerald.clientdomain.com</code> (chat)<br/>
+          <strong>Auto-configured:</strong> DNS records (Cloudflare) • Turnstile CAPTCHA keys
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label for="clientName">Client Name</label>
+        <input id="clientName" type="text" class="input-field" placeholder="Client Name" />
+      </div>
+
+      <div class="form-group">
+        <label for="guardrailLevel">Guardrail Level</label>
+        <div class="select-wrapper">
+          <select id="guardrailLevel" class="input-field">
+            <option value="standard">Standard (text + images only)</option>
+            <option value="admin">Admin (create/delete pages, limited design)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="githubToken">GitHub Personal Access Token</label>
+        <div class="input-group">
+          <input id="githubToken" type="password" class="input-field input-group-field" placeholder="github_pat_..." />
+          <button type="button" id="githubTokenSave" class="btn-secondary btn-compact">Save Token</button>
+        </div>
+        <p id="githubTokenStatus" class="field-hint">
+          Fine-grained PAT with Contents:Read permission.
+          <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Create one →</a>
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label for="githubRepo">Repository</label>
+        <div class="select-wrapper">
+          <select id="githubRepo" class="input-field" disabled>
+            <option value="">Save token first...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="prodBranch">Production Branch</label>
+          <input id="prodBranch" type="text" class="input-field" placeholder="main" value="main" />
+        </div>
+        <div class="form-group">
+          <label for="devBranch">Development Branch</label>
+          <input id="devBranch" type="text" class="input-field" placeholder="development" value="development" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Dashboard Authentication -->
+    <div class="card card-fade-in" style="animation-delay: 0.5s">
+      <div class="card-header">
+        <div class="step-badge step-number">④</div>
+        <h2>Dashboard Authentication</h2>
+      </div>
+      <p class="card-description">Configure magic link authentication via SendGrid</p>
+      
+      <div class="form-group">
+        <label for="sendgridApiKey">SendGrid API Key</label>
+        <input id="sendgridApiKey" type="password" class="input-field" placeholder="SG.xxx" />
+        <p class="field-hint">
+          Required for magic link login emails.
+          <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">Get your key →</a>
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label for="sendgridSenderEmail">SendGrid Sender Email</label>
+        <input id="sendgridSenderEmail" type="email" class="input-field" placeholder="noreply@yourdomain.com" />
+        <p class="field-hint">
+          The "From" address for login emails. <strong>Domain verification will be handled automatically</strong> when both SendGrid and Cloudflare are configured.
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label for="allowedEmails">Allowed Emails</label>
+        <textarea id="allowedEmails" rows="4" class="input-field textarea-field" placeholder="andy@illumin8.ca&#10;admin@yourdomain.com"></textarea>
+        <p class="field-hint">One email per line. Only these emails can access the dashboard.</p>
+      </div>
+    </div>
+
+    <!-- Step 5: Services (Collapsible) -->
+    <div class="card card-fade-in" style="animation-delay: 0.6s">
+      <div class="card-header card-header-collapsible" data-target="services-content">
+        <div class="step-badge step-number">⑤</div>
+        <h2>Contact Form Services</h2>
+        <span class="optional-badge">Optional</span>
+        <button type="button" class="collapse-toggle" aria-label="Toggle section">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div id="services-content" class="collapsible-content collapsed">
+        <p class="card-description">Configure email and SMS for contact forms</p>
+        
+        <div class="form-group">
+          <label for="sendgridKey">SendGrid API Key (Contact Forms)</label>
+          <input id="sendgridKey" type="password" class="input-field" placeholder="SG.xxx" />
+          <p class="field-hint">
+            For contact form email notifications (separate from dashboard auth).
+            <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">Get your key →</a>
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="twilioSid">Twilio Account SID</label>
+          <input id="twilioSid" type="text" class="input-field" placeholder="ACxxx" />
+        </div>
+
+        <div class="form-group">
+          <label for="twilioToken">Twilio Auth Token</label>
+          <input id="twilioToken" type="password" class="input-field" placeholder="Auth token" />
+        </div>
+
+        <div class="form-group">
+          <label for="twilioPhone">Twilio Phone Number</label>
+          <input id="twilioPhone" type="text" class="input-field" placeholder="+1234567890" />
+          <p class="field-hint">
+            For SMS notifications when contact forms are submitted.
+            <a href="https://console.twilio.com/" target="_blank">Twilio Console →</a>
+          </p>
+        </div>
+
+        <div class="info-box">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2a8 8 0 100 16 8 8 0 000-16z" fill="#00b4d8" fill-opacity="0.1"/>
+            <path d="M10 14v-4m0-4h.01" stroke="#00b4d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div>
+            <strong>🛡️ Turnstile CAPTCHA</strong> — Auto-generated during setup when Cloudflare is configured. No manual setup needed.
+            <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank">Manage →</a>
+          </div>
+        </div>
+
+        <input id="turnstileSiteKey" type="hidden" />
+        <input id="turnstileSecretKey" type="hidden" />
+      </div>
+    </div>
+
+    <!-- Step 6: Run Setup -->
+    <div class="card card-fade-in" style="animation-delay: 0.7s">
+      <div class="card-header">
+        <div class="step-badge step-number">⑥</div>
+        <h2>Run Setup</h2>
+      </div>
+      
+      <div class="button-group">
+        <button id="run" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M6 4l10 6-10 6V4z" fill="currentColor"/>
+          </svg>
+          Run Setup
+        </button>
+        <button id="pairingApprove" class="btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M16 6l-8 8-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Approve Pairing
+        </button>
+        <button id="reset" class="btn-tertiary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 10a6 6 0 0112 0M16 10a6 6 0 01-12 0m0 0V6m0 4h4m8 0v4m0-4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Reset Setup
+        </button>
+      </div>
+
+      <pre id="log" class="log-output"></pre>
+      
+      <p class="field-hint" style="margin-top: 1rem; text-align: center;">
+        Reset deletes the OpenClaw config file so you can rerun onboarding. Pairing approval grants DM access when dmPolicy=pairing.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Powered by <strong>Gerald AI</strong> • OpenClaw Railway Template</p>
+    </footer>
   </div>
 
-  <div class="card">
-    <h2>4) Dashboard Authentication</h2>
-    <p class="muted">Configure magic link authentication for the Gerald Dashboard via SendGrid.</p>
-
-    <label>SendGrid API Key</label>
-    <input id="sendgridApiKey" type="password" placeholder="SG.xxx" />
-    <div class="muted" style="margin-top: 0.25rem">
-      Required for magic link login emails.
-      <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">Get your key →</a>
-    </div>
-
-    <label>SendGrid Sender Email</label>
-    <input id="sendgridSenderEmail" type="email" placeholder="noreply@yourdomain.com" />
-    <div class="muted" style="margin-top: 0.25rem">
-      The "From" address for login emails. <strong>Domain verification will be handled automatically</strong> when both SendGrid and Cloudflare are configured. The setup wizard will create DNS records and verify your domain for you.
-    </div>
-
-    <label>Allowed Emails</label>
-    <textarea id="allowedEmails" rows="3" placeholder="andy@illumin8.ca
-admin@yourdomain.com" style="font-family: monospace; width: 100%;"></textarea>
-    <div class="muted" style="margin-top: 0.25rem">
-      One email per line. Only these emails can access the dashboard.
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>5) Services (Optional)</h2>
-    <p class="muted">Configure email and SMS for contact forms. These can also be set up later.</p>
-
-    <label>SendGrid API Key (Contact Forms)</label>
-    <input id="sendgridKey" type="password" placeholder="SG.xxx" />
-    <div class="muted" style="margin-top: 0.25rem">
-      For contact form email notifications (separate from dashboard auth).
-      <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">Get your key →</a>
-    </div>
-
-    <label>Twilio Account SID</label>
-    <input id="twilioSid" type="text" placeholder="ACxxx" />
-
-    <label>Twilio Auth Token</label>
-    <input id="twilioToken" type="password" placeholder="" />
-
-    <label>Twilio Phone Number</label>
-    <input id="twilioPhone" type="text" placeholder="+1234567890" />
-    <div class="muted" style="margin-top: 0.25rem">
-      For SMS notifications when contact forms are submitted.
-      <a href="https://console.twilio.com/" target="_blank">Twilio Console →</a>
-    </div>
-
-    <div class="muted" style="margin-top: 1rem; padding: 0.75rem; border: 1px solid #2a2a3a; border-radius: 6px;">
-      <strong>🛡️ Turnstile CAPTCHA</strong> — Auto-generated during setup when Cloudflare is configured. No manual setup needed.
-      <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank">Manage →</a>
-    </div>
-    <input id="turnstileSiteKey" type="hidden" />
-    <input id="turnstileSecretKey" type="hidden" />
-  </div>
-
-  <div class="card">
-    <h2>6) Run onboarding</h2>
-    <button id="run">Run setup</button>
-    <button id="pairingApprove" class="secondary-button">Approve pairing</button>
-    <button id="reset" class="tertiary-button">Reset setup</button>
-    <pre id="log"></pre>
-    <p class="muted">Reset deletes the Openclaw config file so you can rerun onboarding. Pairing approval lets you grant DM access when dmPolicy=pairing.</p>
-  </div>
-
-  <script src="/setup/app.js?v=2"></script>
+  <script src="/setup/app.js?v=3"></script>
 </body>
 </html>
