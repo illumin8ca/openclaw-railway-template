@@ -2342,6 +2342,52 @@ proxy.on("proxyReq", (proxyReq, req, res) => {
   }
 });
 
+// Inject X-Robots-Tag and meta tag into dev server responses
+proxy.on("proxyRes", (proxyRes, req, res) => {
+  // Only for dev-server target (set in routing middleware)
+  if (req._proxyTarget === 'dev-server') {
+    // Set X-Robots-Tag header on all proxied responses
+    proxyRes.headers['x-robots-tag'] = 'noindex, nofollow';
+    
+    // Inject meta tag into HTML responses
+    const contentType = proxyRes.headers['content-type'] || '';
+    if (contentType.includes('text/html')) {
+      const _write = res.write;
+      const _end = res.end;
+      const chunks = [];
+      
+      res.write = function(chunk, ...args) {
+        chunks.push(Buffer.from(chunk));
+        return true;
+      };
+      
+      res.end = function(chunk, ...args) {
+        if (chunk) {
+          chunks.push(Buffer.from(chunk));
+        }
+        
+        let body = Buffer.concat(chunks).toString('utf8');
+        
+        // Inject noindex meta tag if not already present
+        if (!body.includes('name="robots"') && body.includes('<head>')) {
+          body = body.replace(
+            '<head>',
+            '<head>\n  <meta name="robots" content="noindex, nofollow">'
+          );
+        }
+        
+        // Update Content-Length
+        delete proxyRes.headers['content-length'];
+        res.setHeader('Content-Length', Buffer.byteLength(body));
+        
+        res.write = _write;
+        res.end = _end;
+        res.end(body);
+      };
+    }
+  }
+});
+
 // Log WebSocket upgrade proxy events (token is injected via headers option in server.on("upgrade"))
 proxy.on("proxyReqWs", (proxyReq, req, socket, options, head) => {
   console.log(`[proxy-event] WebSocket proxyReqWs event fired for ${req.url}`);
@@ -2371,9 +2417,18 @@ app.use(async (req, res, next) => {
 
     // Dev site: dev.clientdomain.com → live dev server (or static fallback)
     if (host === `dev.${clientDomain}`) {
+      // Serve robots.txt that blocks all crawlers
+      if (req.path === '/robots.txt') {
+        res.set('X-Robots-Tag', 'noindex, nofollow');
+        res.type('text/plain');
+        return res.send('User-agent: *\nDisallow: /\nNoindex: /');
+      }
+
+      // Set X-Robots-Tag header on all dev subdomain responses
       res.set('X-Robots-Tag', 'noindex, nofollow');
+
       if (devServerProcess) {
-        req._proxyTarget = 'dashboard'; // skip gateway token injection
+        req._proxyTarget = 'dev-server'; // skip gateway token injection, enable meta tag injection
         return proxy.web(req, res, { target: DEV_SERVER_TARGET });
       }
       // Fallback to static files if dev server isn't running
