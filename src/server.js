@@ -1773,13 +1773,21 @@ async function startDashboard() {
     dashboardProcess = null;
   });
 
-  // Wait for it to be ready
+  // Wait for it to be ready (try /api/health first, fall back to / for older versions)
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 1000));
     try {
       const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/health`);
       if (res.ok) {
-        console.log('[dashboard] Ready');
+        console.log('[dashboard] Ready (health check)');
+        return;
+      }
+    } catch {}
+    // Fallback: any response from / means the server is up
+    try {
+      const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/`);
+      if (res.status < 500) {
+        console.log('[dashboard] Ready (root fallback)');
         return;
       }
     } catch {}
