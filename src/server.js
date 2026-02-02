@@ -1308,6 +1308,7 @@ async function startDashboard() {
       INTERNAL_API_KEY: INTERNAL_API_KEY,
       JWT_SECRET: process.env.JWT_SECRET || dashboardJwtSecret,
       ALLOWED_TELEGRAM_IDS: process.env.ALLOWED_TELEGRAM_IDS || '511172388',
+      TELEGRAM_BOT_ID: process.env.TELEGRAM_BOT_ID || '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
