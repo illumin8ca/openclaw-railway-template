@@ -2484,7 +2484,6 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
             allowedEmails: emails,
             sessions: {},
             magicLinks: {},
-            telegramCodes: {},
           };
           
           fs.writeFileSync(
