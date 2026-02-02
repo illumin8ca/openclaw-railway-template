@@ -1012,22 +1012,25 @@ app.get("/api/auth/verify", async (req, res) => {
 
     // Also authenticate with the Gerald Dashboard (so user doesn't see Telegram login)
     try {
+      console.log('[auth] Generating dashboard magic code via', `${DASHBOARD_TARGET}/api/auth/magic/generate`);
       const dashRes = await fetch(`${DASHBOARD_TARGET}/api/auth/magic/generate`, {
         method: 'POST',
-        headers: { 'X-Api-Key': INTERNAL_API_KEY }
+        headers: { 'X-Api-Key': INTERNAL_API_KEY, 'Content-Type': 'application/json' }
       });
       
       if (dashRes.ok) {
-        const { code } = await dashRes.json();
+        const data = await dashRes.json();
+        console.log('[auth] Dashboard magic code generated, redirecting to /api/auth/magic/' + data.code?.slice(0, 8) + '...');
         // Redirect to dashboard's magic link endpoint which will set the token cookie
-        return res.redirect(`/api/auth/magic/${code}?redirect=${encodeURIComponent(redirect)}`);
+        return res.redirect(`/api/auth/magic/${data.code}`);
       } else {
-        console.error('[auth] Dashboard magic generate failed:', dashRes.status);
+        const body = await dashRes.text();
+        console.error('[auth] Dashboard magic generate failed:', dashRes.status, body);
         // Fallback: just redirect to destination (user will see Telegram login)
         return res.redirect(redirect);
       }
     } catch (dashErr) {
-      console.error('[auth] Dashboard magic auth failed:', dashErr);
+      console.error('[auth] Dashboard magic auth failed:', dashErr.message || dashErr);
       // Fallback: just redirect to destination (user will see Telegram login)
       return res.redirect(redirect);
     }
@@ -1828,6 +1831,7 @@ async function startDashboard() {
       NODE_ENV: 'production',
       OPENCLAW_GATEWAY_URL: GATEWAY_TARGET,
       OPENCLAW_GATEWAY_TOKEN: OPENCLAW_GATEWAY_TOKEN,
+      INTERNAL_API_KEY: INTERNAL_API_KEY,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
