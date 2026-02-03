@@ -1963,10 +1963,15 @@ app.get('/api/github/repos', requireSetupAuth, async (req, res) => {
     }
 
     const formattedRepos = repos.map(repo => ({
+      id: repo.id,
+      name: repo.name,
       full_name: repo.full_name,
+      owner: repo.owner?.login || '',
       private: repo.private,
       default_branch: repo.default_branch,
-      html_url: repo.html_url
+      html_url: repo.html_url,
+      description: repo.description || '',
+      language: repo.language || ''
     }));
 
     res.json({ repos: formattedRepos });
