@@ -1201,9 +1201,16 @@ async function setupSendGridDomainAuth(domain, sendgridApiKey) {
   }
 }
 
+// Helper to safely remove directories (handles node_modules symlinks better than fs.rmSync)
+async function safeRemoveDir(dir) {
+  if (fs.existsSync(dir)) {
+    await runCmd('rm', ['-rf', dir]);
+  }
+}
+
 async function cloneAndBuild(repoUrl, branch, targetDir, token) {
-  // Clean target dir
-  fs.rmSync(targetDir, { recursive: true, force: true });
+  // Clean target dir (use shell rm -rf to handle node_modules properly)
+  await safeRemoveDir(targetDir);
   fs.mkdirSync(targetDir, { recursive: true });
 
   // Clone with token auth
@@ -1217,7 +1224,7 @@ async function cloneAndBuild(repoUrl, branch, targetDir, token) {
     // If branch doesn't exist, create it from the default branch
     if (clone.output.includes('not found') || clone.output.includes('Could not find remote branch')) {
       console.log(`[build] Branch '${branch}' not found, creating from default branch...`);
-      fs.rmSync(targetDir, { recursive: true, force: true });
+      await safeRemoveDir(targetDir);
       fs.mkdirSync(targetDir, { recursive: true });
       
       // Clone default branch
@@ -1301,10 +1308,10 @@ async function cloneAndBuild(repoUrl, branch, targetDir, token) {
       // Move build output to be the root of targetDir
       // First, move output to a temp location
       const tmpDir = targetDir + '_built';
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      await safeRemoveDir(tmpDir);
       fs.renameSync(outputDir, tmpDir);
       // Remove the cloned source
-      fs.rmSync(targetDir, { recursive: true, force: true });
+      await safeRemoveDir(targetDir);
       // Move built output to target
       fs.renameSync(tmpDir, targetDir);
     }
@@ -1405,7 +1412,7 @@ async function pullDevBranch() {
   } else {
     // Fresh clone
     console.log('[dev-server] Fresh clone for dev server...');
-    fs.rmSync(DEV_DIR, { recursive: true, force: true });
+    await safeRemoveDir(DEV_DIR);
     fs.mkdirSync(DEV_DIR, { recursive: true });
     const clone = await runCmd('git', ['clone', '--branch', githubConfig.devBranch, authUrl, DEV_DIR]);
     if (clone.code !== 0) return { ok: false, output: clone.output };
@@ -1429,7 +1436,7 @@ async function setupDashboard(token) {
   // Clone if not present, otherwise pull latest
   if (!fs.existsSync(path.join(DASHBOARD_DIR, 'package.json'))) {
     console.log('[dashboard] Cloning Gerald Dashboard...');
-    fs.rmSync(DASHBOARD_DIR, { recursive: true, force: true });
+    await safeRemoveDir(DASHBOARD_DIR);
     fs.mkdirSync(DASHBOARD_DIR, { recursive: true });
     const clone = await runCmd('git', ['clone', '--depth', '1', authUrl, DASHBOARD_DIR]);
     if (clone.code !== 0) {
@@ -1445,7 +1452,7 @@ async function setupDashboard(token) {
     if (pull.code !== 0) {
       // If pull fails (diverged history from shallow clone), do a fresh clone
       console.log('[dashboard] Pull failed, doing fresh clone...');
-      fs.rmSync(DASHBOARD_DIR, { recursive: true, force: true });
+      await safeRemoveDir(DASHBOARD_DIR);
       fs.mkdirSync(DASHBOARD_DIR, { recursive: true });
       const clone = await runCmd('git', ['clone', '--depth', '1', authUrl, DASHBOARD_DIR]);
       if (clone.code !== 0) {
@@ -2597,7 +2604,7 @@ app.post('/api/rebuild-dashboard', requireSetupAuth, async (req, res) => {
     }
 
     // Remove existing installation to force fresh clone
-    fs.rmSync(DASHBOARD_DIR, { recursive: true, force: true });
+    await safeRemoveDir(DASHBOARD_DIR);
 
     // Token from request body, github.json, or env
     const token = req.body?.token?.trim() || '';
