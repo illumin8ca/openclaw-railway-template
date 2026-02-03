@@ -3143,6 +3143,11 @@ const proxy = httpProxy.createProxyServer({
   target: GATEWAY_TARGET,
   ws: true,
   xfwd: true,
+  // Critical for streaming: don't buffer responses, pipe them immediately
+  changeOrigin: true,
+  // Increase timeout for long-running streaming responses (AI chat)
+  timeout: 300000,      // 5 minutes for initial connection
+  proxyTimeout: 300000, // 5 minutes for proxy response
 });
 
 proxy.on("error", (err, req, res) => {
@@ -3151,6 +3156,39 @@ proxy.on("error", (err, req, res) => {
     res.writeHead(503, { 'Content-Type': 'text/html' });
     res.end('<html><body style="background:#0a0a0f;color:#94a3b8;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#00ff87">Gerald is starting up...</h2><p>Please refresh in a few seconds.</p></div></body></html>');
   }
+});
+
+// Keep-alive for streaming connections
+proxy.on('proxyRes', (proxyRes, req, res) => {
+  // Disable buffering for SSE/streaming responses
+  const contentType = proxyRes.headers['content-type'] || '';
+  const isStreaming = contentType.includes('text/event-stream') || 
+                      contentType.includes('application/octet-stream') ||
+                      req.headers['accept']?.includes('text/event-stream');
+  
+  if (isStreaming) {
+    // Ensure connection stays alive
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering if present
+    
+    // Log streaming connection
+    console.log(`[proxy] Streaming response started: ${req.url}`);
+    
+    // Handle client disconnect
+    req.on('close', () => {
+      console.log(`[proxy] Client disconnected from stream: ${req.url}`);
+    });
+  }
+});
+
+// Log proxy timeout errors specifically
+proxy.on('econnreset', (err, req, res) => {
+  console.error('[proxy] Connection reset error:', err.message);
+});
+
+proxy.on('timeout', (req, res) => {
+  console.error('[proxy] Timeout error on:', req.url);
 });
 
 // Inject auth token into HTTP proxy requests — only for gateway, not Dashboard
@@ -3334,6 +3372,14 @@ const server = app.listen(PORT, async () => {
     startDevServer().catch(err => console.error('[dev-server] Auto-start failed:', err));
   }
 });
+
+// Critical: Increase server timeouts for AI streaming (5 minutes)
+// Default Node.js timeouts are too short for long LLM responses
+server.timeout = 300000; // 5 minutes
+server.keepAliveTimeout = 300000; // 5 minutes
+server.headersTimeout = 301000; // Slightly longer than keepAliveTimeout
+
+console.log(`[wrapper] Server timeouts set: timeout=${server.timeout}ms, keepAliveTimeout=${server.keepAliveTimeout}ms`);
 
 // Handle WebSocket upgrades
 server.on("upgrade", async (req, socket, head) => {
