@@ -1999,6 +1999,67 @@ app.post('/api/github/disconnect', requireSetupAuth, async (req, res) => {
 });
 
 // ==============================
+// Push Notification API Routes
+// ==============================
+// These proxy to the Gerald Dashboard server which handles push notifications
+
+app.get('/api/push/vapid-key', requireSetupAuth, async (req, res) => {
+  try {
+    // Forward to dashboard server
+    const dashboardRes = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/push/vapid-key`);
+    const data = await dashboardRes.json();
+    res.status(dashboardRes.status).json(data);
+  } catch (err) {
+    console.error('[push] vapid-key error:', err);
+    res.status(503).json({ error: 'Dashboard push service unavailable' });
+  }
+});
+
+app.post('/api/push/subscribe', requireSetupAuth, async (req, res) => {
+  try {
+    const dashboardRes = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await dashboardRes.json();
+    res.status(dashboardRes.status).json(data);
+  } catch (err) {
+    console.error('[push] subscribe error:', err);
+    res.status(503).json({ error: 'Dashboard push service unavailable' });
+  }
+});
+
+app.post('/api/push/unsubscribe', requireSetupAuth, async (req, res) => {
+  try {
+    const dashboardRes = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/push/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await dashboardRes.json();
+    res.status(dashboardRes.status).json(data);
+  } catch (err) {
+    console.error('[push] unsubscribe error:', err);
+    res.status(503).json({ error: 'Dashboard push service unavailable' });
+  }
+});
+
+app.post('/api/push/test', requireSetupAuth, async (req, res) => {
+  try {
+    const dashboardRes = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/push/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await dashboardRes.json();
+    res.status(dashboardRes.status).json(data);
+  } catch (err) {
+    console.error('[push] test error:', err);
+    res.status(503).json({ error: 'Dashboard push service unavailable — is VAPID configured?' });
+  }
+});
+
+// ==============================
 // Codex CLI Authentication (Device Code Flow)
 // ==============================
 app.post('/setup/api/codex/start-auth', requireSetupAuth, async (req, res) => {
