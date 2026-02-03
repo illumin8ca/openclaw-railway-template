@@ -543,8 +543,145 @@
     }
   };
 
+  // ==============================
+  // Codex CLI Authentication
+  // ==============================
+  window.startCodexAuth = async function() {
+    document.getElementById('codex-not-connected').style.display = 'none';
+    document.getElementById('codex-auth-progress').style.display = 'block';
+
+    try {
+      const res = await fetch('/setup/api/codex/start-auth', { method: 'POST' });
+      const data = await res.json();
+      
+      if (!res.ok || !data.verification_uri) {
+        alert('Failed to start Codex authentication: ' + (data.error || 'Unknown error'));
+        window.resetCodexUI();
+        return;
+      }
+
+      document.getElementById('codex-user-code').textContent = data.user_code;
+      document.getElementById('codex-verify-link').href = data.verification_uri;
+
+      // Poll for completion (Codex will write to ~/.codex/auth.json when complete)
+      window.pollCodexAuth();
+    } catch (err) {
+      alert('Error: ' + err.message);
+      window.resetCodexUI();
+    }
+  };
+
+  window.pollCodexAuth = async function() {
+    const maxAttempts = 60; // 5 minutes
+    let attempts = 0;
+
+    const interval = setInterval(async () => {
+      attempts++;
+      
+      try {
+        const res = await fetch('/setup/api/codex/status');
+        const data = await res.json();
+
+        if (data.authenticated) {
+          clearInterval(interval);
+          document.getElementById('codex-auth-progress').style.display = 'none';
+          document.getElementById('codex-connected').style.display = 'block';
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          alert('Authentication timeout. Please try again.');
+          window.resetCodexUI();
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 5000); // Check every 5 seconds
+  };
+
+  window.disconnectCodex = async function() {
+    if (!confirm('Disconnect Codex CLI?')) return;
+    
+    try {
+      await fetch('/setup/api/codex/disconnect', { method: 'POST' });
+      window.resetCodexUI();
+    } catch (err) {
+      alert('Failed to disconnect: ' + err.message);
+    }
+  };
+
+  window.resetCodexUI = function() {
+    document.getElementById('codex-not-connected').style.display = 'block';
+    document.getElementById('codex-auth-progress').style.display = 'none';
+    document.getElementById('codex-connected').style.display = 'none';
+  };
+
+  window.checkCodexStatus = async function() {
+    try {
+      const res = await fetch('/setup/api/codex/status');
+      const data = await res.json();
+      
+      if (data.authenticated) {
+        document.getElementById('codex-not-connected').style.display = 'none';
+        document.getElementById('codex-connected').style.display = 'block';
+      }
+    } catch (err) {
+      console.error('Failed to check Codex status:', err);
+    }
+  };
+
+  // ==============================
+  // Claude Code CLI Authentication
+  // ==============================
+  window.showClaudeInstructions = function() {
+    document.getElementById('claude-not-connected').style.display = 'none';
+    document.getElementById('claude-instructions').style.display = 'block';
+  };
+
+  window.hideClaudeInstructions = function() {
+    document.getElementById('claude-instructions').style.display = 'none';
+    document.getElementById('claude-not-connected').style.display = 'block';
+  };
+
+  window.checkClaudeStatus = async function() {
+    try {
+      const res = await fetch('/setup/api/claude/status');
+      const data = await res.json();
+      
+      if (data.authenticated) {
+        document.getElementById('claude-instructions').style.display = 'none';
+        document.getElementById('claude-connected').style.display = 'block';
+        if (data.account) {
+          document.getElementById('claude-account').textContent = data.account;
+        }
+        alert('✓ Claude Code is authenticated!');
+      } else {
+        alert('Claude Code is not yet authenticated. Please follow the instructions.');
+      }
+    } catch (err) {
+      alert('Error checking status: ' + err.message);
+    }
+  };
+
+  window.disconnectClaude = async function() {
+    if (!confirm('Disconnect Claude Code CLI?')) return;
+    
+    try {
+      await fetch('/setup/api/claude/disconnect', { method: 'POST' });
+      window.resetClaudeUI();
+    } catch (err) {
+      alert('Failed to disconnect: ' + err.message);
+    }
+  };
+
+  window.resetClaudeUI = function() {
+    document.getElementById('claude-not-connected').style.display = 'block';
+    document.getElementById('claude-instructions').style.display = 'none';
+    document.getElementById('claude-connected').style.display = 'none';
+  };
+
   // Initialize everything
   initCollapsibles();
   refreshStatus();
   window.checkGitHubStatus();
+  window.checkCodexStatus();
+  window.checkClaudeStatus();
 })();

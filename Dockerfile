@@ -78,6 +78,13 @@ USER root
 RUN chown -R root:root /home/linuxbrew/.linuxbrew
 ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
+# Install Claude Code CLI and Codex CLI
+RUN npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest
+
+# Create config directories for CLI auth files
+RUN mkdir -p /data/.claude /data/.codex
+ENV HOME=/data
+
 WORKDIR /app
 
 # Wrapper deps

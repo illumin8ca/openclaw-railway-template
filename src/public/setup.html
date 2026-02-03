@@ -241,6 +241,119 @@
           <input id="devBranch" type="text" class="input-field" placeholder="development" value="development" />
         </div>
       </div>
+
+      <!-- CLI Authentication Section -->
+      <div class="form-group" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid rgba(136, 146, 176, 0.1);">
+        <label>CLI Authentication (Beta)</label>
+        <p class="field-hint" style="margin-bottom: 16px;">
+          Enable subscription-based authentication using Claude Code or Codex CLIs. 
+          These authenticate via your Claude Pro/Max or ChatGPT Plus/Pro subscriptions.
+        </p>
+
+        <!-- Codex (OpenAI) -->
+        <div id="codex-section" style="margin-bottom: 20px;">
+          <h4 style="color: #00ff87; font-size: 14px; font-weight: 600; margin-bottom: 12px;">
+            🤖 OpenAI Codex
+          </h4>
+          
+          <!-- Not connected state -->
+          <div id="codex-not-connected">
+            <p class="field-hint" style="margin-bottom: 12px;">
+              Uses your ChatGPT Plus/Pro subscription. Requires device code authentication enabled in your ChatGPT security settings.
+            </p>
+            <button type="button" onclick="startCodexAuth()" class="btn-primary" style="width: 100%;">
+              Connect Codex
+            </button>
+          </div>
+
+          <!-- Auth in progress state -->
+          <div id="codex-auth-progress" style="display:none">
+            <p class="field-hint" style="margin-bottom: 8px;">Enter this code on ChatGPT:</p>
+            <div class="user-code" id="codex-user-code">XXXX-XXXX</div>
+            <a href="" id="codex-verify-link" target="_blank" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">
+              Open verification page →
+            </a>
+            <p class="field-hint">⏳ Waiting for authorization...</p>
+          </div>
+
+          <!-- Connected state -->
+          <div id="codex-connected" style="display:none">
+            <div class="info-box" style="margin-bottom: 16px;">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2a8 8 0 100 16 8 8 0 000-16z" fill="#00ff87" fill-opacity="0.1"/>
+                <path d="M9 12l-2-2m0 0l2-2m-2 2h6m-6 0a5 5 0 105-5" stroke="#00ff87" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <strong>✅ Connected via ChatGPT subscription</strong>
+              </div>
+            </div>
+            <button type="button" onclick="disconnectCodex()" class="btn-tertiary" style="width: 100%;">
+              Disconnect Codex
+            </button>
+          </div>
+        </div>
+
+        <!-- Claude Code -->
+        <div id="claude-section" style="padding-top: 16px; border-top: 1px solid rgba(136, 146, 176, 0.1);">
+          <h4 style="color: #00ff87; font-size: 14px; font-weight: 600; margin-bottom: 12px;">
+            🧠 Anthropic Claude Code
+          </h4>
+          
+          <!-- Not connected state -->
+          <div id="claude-not-connected">
+            <p class="field-hint" style="margin-bottom: 12px;">
+              Uses your Claude Pro/Max subscription. Manual authentication required via SSH.
+            </p>
+            <button type="button" onclick="showClaudeInstructions()" class="btn-secondary" style="width: 100%;">
+              Show Authentication Instructions
+            </button>
+          </div>
+
+          <!-- Instructions state -->
+          <div id="claude-instructions" style="display:none">
+            <div class="info-box" style="margin-bottom: 16px;">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="8" stroke="#00b4d8" stroke-width="2" fill="none"/>
+                <text x="10" y="14" text-anchor="middle" fill="#00b4d8" font-size="12" font-weight="bold">i</text>
+              </svg>
+              <div>
+                <strong>Manual Authentication Required</strong>
+                <p style="margin-top: 8px; font-size: 13px; line-height: 1.5;">
+                  1. SSH into your Railway instance<br>
+                  2. Run: <code style="background: rgba(0,255,135,0.1); padding: 2px 6px; border-radius: 4px;">claude</code><br>
+                  3. Follow the authentication flow in your browser<br>
+                  4. Refresh this page to verify connection
+                </p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px;">
+              <button type="button" onclick="checkClaudeStatus()" class="btn-primary" style="flex: 1;">
+                ✓ Check Status
+              </button>
+              <button type="button" onclick="hideClaudeInstructions()" class="btn-tertiary" style="flex: 1;">
+                Hide Instructions
+              </button>
+            </div>
+          </div>
+
+          <!-- Connected state -->
+          <div id="claude-connected" style="display:none">
+            <div class="info-box" style="margin-bottom: 16px;">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2a8 8 0 100 16 8 8 0 000-16z" fill="#00ff87" fill-opacity="0.1"/>
+                <path d="M9 12l-2-2m0 0l2-2m-2 2h6m-6 0a5 5 0 105-5" stroke="#00ff87" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <strong>✅ Connected via Claude subscription</strong>
+                <p style="margin-top: 4px; font-size: 13px;">Account: <span id="claude-account">authenticated</span></p>
+              </div>
+            </div>
+            <button type="button" onclick="disconnectClaude()" class="btn-tertiary" style="width: 100%;">
+              Disconnect Claude
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Step 4: Dashboard Authentication -->

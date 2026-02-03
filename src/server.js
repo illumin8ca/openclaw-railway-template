@@ -1791,6 +1791,154 @@ app.post('/setup/api/github/disconnect', requireSetupAuth, async (req, res) => {
   }
 });
 
+// ==============================
+// Codex CLI Authentication (Device Code Flow)
+// ==============================
+app.post('/setup/api/codex/start-auth', requireSetupAuth, async (req, res) => {
+  try {
+    // Codex CLI supports device code auth via `codex login --device-auth`
+    // We'll initiate the flow by running the command and capturing the output
+    const { stdout, stderr } = await new Promise((resolve, reject) => {
+      const proc = child_process.spawn('codex', ['login', '--device-auth'], {
+        env: { ...process.env, HOME: '/data', CODEX_HOME: '/data/.codex' },
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdoutData = '';
+      let stderrData = '';
+
+      proc.stdout.on('data', (data) => {
+        stdoutData += data.toString();
+      });
+
+      proc.stderr.on('data', (data) => {
+        stderrData += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        resolve({ stdout: stdoutData, stderr: stderrData, code });
+      });
+
+      proc.on('error', (err) => {
+        reject(err);
+      });
+
+      // Kill after 10 seconds if it hangs
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error('Codex login timeout'));
+      }, 10000);
+    });
+
+    // Parse the output for device code and verification URL
+    // Expected output format:
+    // "Visit https://chatgpt.com/device and enter code: XXXX-XXXX"
+    const output = stdout + stderr;
+    const urlMatch = output.match(/Visit\s+(https:\/\/[^\s]+)/i);
+    const codeMatch = output.match(/code:\s*([A-Z0-9-]+)/i);
+
+    if (!urlMatch || !codeMatch) {
+      console.error('[codex-auth] Could not parse device code:', output);
+      return res.status(500).json({ 
+        ok: false, 
+        error: 'Failed to parse device code from Codex CLI output',
+        rawOutput: output
+      });
+    }
+
+    res.json({
+      verification_uri: urlMatch[1],
+      user_code: codeMatch[1],
+      message: 'Visit the URL and enter the code to authenticate'
+    });
+  } catch (err) {
+    console.error('[codex-auth] start-auth error:', err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+app.get('/setup/api/codex/status', requireSetupAuth, async (req, res) => {
+  try {
+    const authPath = path.join('/data/.codex', 'auth.json');
+    
+    if (!fs.existsSync(authPath)) {
+      return res.json({ authenticated: false });
+    }
+
+    const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    
+    // Check if we have a valid token structure
+    if (authData.access_token || authData.token) {
+      return res.json({ 
+        authenticated: true,
+        // Don't expose full auth data, just confirmation
+        provider: authData.provider || 'chatgpt'
+      });
+    }
+
+    res.json({ authenticated: false });
+  } catch (err) {
+    console.error('[codex-auth] status error:', err);
+    res.json({ authenticated: false, error: String(err) });
+  }
+});
+
+app.post('/setup/api/codex/disconnect', requireSetupAuth, async (req, res) => {
+  try {
+    const authPath = path.join('/data/.codex', 'auth.json');
+    if (fs.existsSync(authPath)) {
+      fs.unlinkSync(authPath);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[codex-auth] disconnect error:', err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ==============================
+// Claude Code CLI Authentication
+// ==============================
+// Note: Claude Code does not support device code flow.
+// Users need to authenticate manually via SSH or provide instructions.
+app.get('/setup/api/claude/status', requireSetupAuth, async (req, res) => {
+  try {
+    const authPath = path.join('/data', '.claude.json');
+    
+    if (!fs.existsSync(authPath)) {
+      return res.json({ authenticated: false });
+    }
+
+    const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    
+    // Check for oauthAccount field (indicates Claude Pro/Max subscription)
+    if (authData.oauthAccount || authData.accessToken) {
+      return res.json({ 
+        authenticated: true,
+        account: authData.oauthAccount?.email || 'authenticated'
+      });
+    }
+
+    res.json({ authenticated: false });
+  } catch (err) {
+    console.error('[claude-auth] status error:', err);
+    res.json({ authenticated: false, error: String(err) });
+  }
+});
+
+app.post('/setup/api/claude/disconnect', requireSetupAuth, async (req, res) => {
+  try {
+    const authPath = path.join('/data', '.claude.json');
+    if (fs.existsSync(authPath)) {
+      fs.unlinkSync(authPath);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[claude-auth] disconnect error:', err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
   try {
     if (isConfigured()) {
