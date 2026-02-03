@@ -3210,6 +3210,181 @@ server.on("upgrade", async (req, socket, head) => {
   }
 });
 
+// ==============================
+// Dashboard API Routes (for Gerald Dashboard client compatibility)
+// ==============================
+
+// Health check endpoint for dashboard
+app.get('/api/health/summary', requireSetupAuth, async (req, res) => {
+  try {
+    // Return mock health data for now - in full deployment this would query the DB
+    res.json({
+      today: {
+        step_count: 0,
+        active_energy: 0,
+        sleep_hours: 0,
+        exercise_minutes: 0,
+        stand_hours: 0
+      },
+      goals: {
+        step_count: 10000,
+        active_energy: 500,
+        sleep_hours: 8,
+        exercise_minutes: 30,
+        stand_hours: 12
+      }
+    });
+  } catch (err) {
+    console.error('[health] summary error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/health/history/:metric', requireSetupAuth, async (req, res) => {
+  try {
+    const { metric } = req.params;
+    const days = parseInt(req.query.days) || 7;
+    // Return empty history - full deployment would query DB
+    res.json({ metric, days, data: [] });
+  } catch (err) {
+    console.error('[health] history error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/health/hourly/:metric', requireSetupAuth, async (req, res) => {
+  try {
+    const { metric } = req.params;
+    const date = req.query.date;
+    // Return empty hourly data
+    res.json({ metric, date, data: [] });
+  } catch (err) {
+    console.error('[health] hourly error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/health/vitals', requireSetupAuth, async (req, res) => {
+  try {
+    res.json({ vitals: [] });
+  } catch (err) {
+    console.error('[health] vitals error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/health/workouts/today', requireSetupAuth, async (req, res) => {
+  try {
+    res.json({ workouts: [] });
+  } catch (err) {
+    console.error('[health] workouts error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Dashboard version check endpoint
+app.get('/api/dashboard/gerald-version', requireSetupAuth, async (req, res) => {
+  try {
+    // Get git info from the dashboard directory
+    const dashboardDir = path.join(STATE_DIR, 'gerald-dashboard');
+    let currentCommit = 'unknown';
+    let currentDate = null;
+    let behindBy = 0;
+
+    if (fs.existsSync(dashboardDir)) {
+      try {
+        const { output: commit } = await runCmd('git', ['rev-parse', '--short', 'HEAD'], { cwd: dashboardDir });
+        currentCommit = commit.trim();
+        
+        const { output: date } = await runCmd('git', ['log', '-1', '--format=%ci'], { cwd: dashboardDir });
+        currentDate = date.trim();
+
+        // Check if behind origin/main
+        await runCmd('git', ['fetch', 'origin', 'main'], { cwd: dashboardDir });
+        const { output: behind } = await runCmd('git', ['rev-list', '--count', 'HEAD..origin/main'], { cwd: dashboardDir });
+        behindBy = parseInt(behind.trim()) || 0;
+      } catch (gitErr) {
+        console.log('[gerald-version] git check failed:', gitErr.message);
+      }
+    }
+
+    res.json({
+      currentCommit,
+      currentDate,
+      behindBy,
+      canUpdate: behindBy > 0,
+      updateAvailable: behindBy > 0
+    });
+  } catch (err) {
+    console.error('[gerald-version] error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Dashboard update endpoint
+app.post('/api/dashboard/gerald-update', requireSetupAuth, async (req, res) => {
+  try {
+    const dashboardDir = path.join(STATE_DIR, 'gerald-dashboard');
+    
+    if (!fs.existsSync(dashboardDir)) {
+      return res.status(400).json({ success: false, error: 'Dashboard not installed' });
+    }
+
+    // Pull latest changes
+    const { output: pullOutput } = await runCmd('git', ['pull', 'origin', 'main'], { cwd: dashboardDir });
+    
+    // Rebuild the dashboard
+    await runCmd('npm', ['run', 'build'], { cwd: dashboardDir });
+
+    // Restart dashboard process
+    if (dashboardProcess) {
+      dashboardProcess.kill('SIGTERM');
+      await new Promise(r => setTimeout(r, 2000));
+      await startDashboard();
+    }
+
+    res.json({
+      success: true,
+      message: `Updated and rebuilt. ${pullOutput}`,
+      restarted: true
+    });
+  } catch (err) {
+    console.error('[gerald-update] error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
+// System health endpoint
+app.get('/api/system/health', requireSetupAuth, async (req, res) => {
+  try {
+    const status = {
+      gateway: gatewayProc ? 'running' : 'stopped',
+      dashboard: dashboardProcess ? 'running' : 'stopped',
+      devServer: devServerProcess ? 'running' : 'stopped',
+      openclaw: await checkOpenClawHealth(),
+      timestamp: new Date().toISOString()
+    };
+    res.json(status);
+  } catch (err) {
+    console.error('[system-health] error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+async function checkOpenClawHealth() {
+  try {
+    const result = await runCmd(OPENCLAW_NODE, clawArgs(['status', '--json']), { timeout: 10000 });
+    const data = JSON.parse(result.output);
+    return {
+      status: data.gateway?.state || 'unknown',
+      sessions: data.agents?.sessions || 0,
+      memory: data.memory?.files || 0
+    };
+  } catch {
+    return { status: 'unknown', sessions: 0, memory: 0 };
+  }
+}
+
 process.on("SIGTERM", () => {
   // Best-effort shutdown
   try {
