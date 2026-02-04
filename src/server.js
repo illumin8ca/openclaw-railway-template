@@ -3493,7 +3493,10 @@ app.use(async (req, res, next) => {
         return proxy.web(req, res, { target: DEV_SERVER_TARGET });
       }
       // Fallback to static files if dev server isn't running
-      return serveStaticSite(DEV_DIR, req, res);
+      // Check for dist folder first (source code kept, build output in dist/)
+      const devDistDir = path.join(DEV_DIR, 'dist');
+      const devStaticDir = fs.existsSync(devDistDir) ? devDistDir : DEV_DIR;
+      return serveStaticSite(devStaticDir, req, res);
     }
 
     // Gerald dashboard: gerald.clientdomain.com → Dashboard (transparent proxy)
