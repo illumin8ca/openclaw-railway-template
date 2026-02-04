@@ -2191,16 +2191,22 @@ app.post('/setup/api/codex/save-token', requireSetupAuth, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'authJson is required' });
     }
     
-    // Validate it's valid JSON with expected fields
+    // Validate it's valid JSON
     let authData;
     try {
       authData = typeof authJson === 'string' ? JSON.parse(authJson) : authJson;
     } catch (e) {
-      return res.status(400).json({ ok: false, error: 'Invalid JSON format' });
+      console.error('[codex-auth] JSON parse error:', e.message, 'Input:', authJson.substring(0, 200));
+      return res.status(400).json({ ok: false, error: 'Invalid JSON format: ' + e.message });
     }
     
-    if (!authData.access_token && !authData.token && !authData.refresh_token) {
-      return res.status(400).json({ ok: false, error: 'Auth JSON must contain access_token, token, or refresh_token' });
+    // Log what we received for debugging
+    console.log('[codex-auth] Received keys:', Object.keys(authData));
+    
+    // Accept any valid JSON - Codex auth format may vary
+    // Just make sure it's not empty
+    if (Object.keys(authData).length === 0) {
+      return res.status(400).json({ ok: false, error: 'Auth JSON is empty' });
     }
     
     // Save to /data/.codex/auth.json
