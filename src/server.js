@@ -1655,6 +1655,34 @@ async function startDashboard() {
     console.warn('[workspace] Setup error:', err.message);
   }
 
+  // Load shared secrets if master key is set
+  if (process.env.GERALD_MASTER_KEY) {
+    const loadSecretsScript = path.join(WORKSPACE_DIR, 'scripts', 'load-secrets.sh');
+    if (fs.existsSync(loadSecretsScript)) {
+      console.log('[secrets] Loading shared secrets...');
+      try {
+        const secretsResult = await runCmd('bash', [loadSecretsScript], {
+          env: { 
+            ...process.env, 
+            GERALD_MASTER_KEY: process.env.GERALD_MASTER_KEY, 
+            STATE_DIR: STATE_DIR 
+          }
+        });
+        if (secretsResult.code === 0) {
+          console.log('[secrets] ✅ Shared secrets loaded');
+        } else {
+          console.warn('[secrets] ⚠️  Failed to load secrets:', secretsResult.output);
+        }
+      } catch (err) {
+        console.warn('[secrets] Error loading secrets:', err.message);
+      }
+    } else {
+      console.log('[secrets] Script not found, skipping');
+    }
+  } else {
+    console.log('[secrets] GERALD_MASTER_KEY not set, skipping shared secrets');
+  }
+
   // Always run setup (which pulls latest + rebuilds) before starting
   // Use timeout to prevent blocking forever
   console.log('[dashboard] Checking for updates...');
