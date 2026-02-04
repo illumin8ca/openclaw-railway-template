@@ -2949,8 +2949,17 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
         // Clone development branch and start dev server
         extra += `[build] Cloning dev branch (${devBranch}) for live dev server...\n`;
+        extra += `[build] Target directory: ${DEV_DIR}\n`;
         const devResult = await cloneAndBuild(repoUrl, devBranch, DEV_DIR, token, { keepSource: true });
         extra += `[build] Dev: ${devResult.output}\n`;
+        
+        // Verify dev site has files
+        const devHasPackageJson = fs.existsSync(path.join(DEV_DIR, 'package.json'));
+        const devHasDist = fs.existsSync(path.join(DEV_DIR, 'dist'));
+        extra += `[build] Dev verification: package.json=${devHasPackageJson}, dist=${devHasDist}\n`;
+        if (!devHasPackageJson) {
+          extra += `[build] ⚠️ Warning: Dev directory missing package.json - dev server may not work\n`;
+        }
 
         // Start dev server
         try {
