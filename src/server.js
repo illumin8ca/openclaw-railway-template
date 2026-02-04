@@ -2658,7 +2658,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           clientName: payload.clientName?.trim() || '',
           guardrailLevel: payload.guardrailLevel || 'standard',
           githubRepo: payload.githubRepo?.trim() || '',
-          workspaceRepo: payload.workspaceRepo?.trim() || '', // Gerald workspace repo (SOUL.md, memories, skills)
+          // workspaceRepo is hardcoded to illumin8ca/gerald
           prodBranch: payload.prodBranch?.trim() || 'main',
           devBranch: payload.devBranch?.trim() || 'development',
           configuredAt: new Date().toISOString(),

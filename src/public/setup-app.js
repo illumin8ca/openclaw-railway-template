@@ -205,6 +205,17 @@
       turnstileSecretKey: document.getElementById('turnstileSecretKey').value
     };
 
+    // Validate required fields
+    var errors = [];
+    if (!payload.clientDomain?.trim()) errors.push('Client Domain is required');
+    if (!payload.githubRepo?.trim()) errors.push('Website Repository is required (connect GitHub and select a repo)');
+    if (!payload.authSecret?.trim() && payload.authChoice !== 'none') errors.push('Auth Secret is required');
+    
+    if (errors.length > 0) {
+      alert('Missing required fields:\n\n• ' + errors.join('\n• '));
+      return;
+    }
+
     logEl.textContent = 'Running...\n';
     
     // Auto-scroll log output
@@ -491,24 +502,13 @@
       
       // Populate website repo dropdown
       const siteSelect = document.getElementById('github-repo-select');
-      siteSelect.innerHTML = '<option value="">Select a repository...</option>';
-      
-      // Populate workspace repo dropdown
-      const workspaceSelect = document.getElementById('workspace-repo-select');
-      workspaceSelect.innerHTML = '<option value="">None (use default: illumin8ca/gerald)</option>';
+      siteSelect.innerHTML = '<option value="">Select a repository... (required)</option>';
       
       data.repos.forEach(function(repo) {
-        // Add to site select
-        var opt1 = document.createElement('option');
-        opt1.value = repo.full_name;
-        opt1.textContent = repo.full_name + (repo.private ? ' 🔒' : '');
-        siteSelect.appendChild(opt1);
-        
-        // Add to workspace select
-        var opt2 = document.createElement('option');
-        opt2.value = 'https://github.com/' + repo.full_name;
-        opt2.textContent = repo.full_name + (repo.private ? ' 🔒' : '');
-        workspaceSelect.appendChild(opt2);
+        var opt = document.createElement('option');
+        opt.value = repo.full_name;
+        opt.textContent = repo.full_name + (repo.private ? ' 🔒' : '');
+        siteSelect.appendChild(opt);
       });
       
       // Pre-select repos that match common patterns
@@ -516,11 +516,6 @@
         return r.full_name.includes('-site') || r.full_name.includes('-website') || r.full_name.includes('-web');
       });
       if (siteRepo) siteSelect.value = siteRepo.full_name;
-      
-      var workspaceRepo = data.repos.find(function(r) { 
-        return r.full_name.includes('gerald') && !r.full_name.includes('dashboard');
-      });
-      if (workspaceRepo) workspaceSelect.value = 'https://github.com/' + workspaceRepo.full_name;
     } catch (err) {
       alert('Failed to load repos: ' + err.message);
     }
