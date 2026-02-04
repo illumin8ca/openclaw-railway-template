@@ -1248,6 +1248,111 @@ async function safeRemoveDir(dir) {
   }
 }
 
+// Auto-save uncommitted dev site changes before destructive operations
+async function autoSaveDevChanges() {
+  try {
+    // Check if DEV_DIR exists and has a .git directory
+    const gitDir = path.join(DEV_DIR, '.git');
+    if (!fs.existsSync(DEV_DIR) || !fs.existsSync(gitDir)) {
+      console.log('[auto-save] DEV_DIR not a git repo, skipping auto-save');
+      return { ok: true, saved: false };
+    }
+
+    // Check for uncommitted changes
+    const status = await runCmd('git', ['status', '--porcelain'], { cwd: DEV_DIR });
+    if (status.code !== 0) {
+      console.error(`[auto-save] git status failed: ${status.output}`);
+      return { ok: false, error: status.output };
+    }
+
+    const hasChanges = status.output.trim().length > 0;
+    if (!hasChanges) {
+      console.log('[auto-save] No uncommitted changes, skipping auto-save');
+      return { ok: true, saved: false };
+    }
+
+    console.log('[auto-save] Uncommitted changes detected, saving...');
+
+    // Set git user config before committing
+    await runCmd('git', ['config', 'user.email', 'gerald@illumin8.ca'], { cwd: DEV_DIR });
+    await runCmd('git', ['config', 'user.name', 'Gerald'], { cwd: DEV_DIR });
+
+    // Stage all changes
+    const add = await runCmd('git', ['add', '-A'], { cwd: DEV_DIR });
+    if (add.code !== 0) {
+      console.error(`[auto-save] git add failed: ${add.output}`);
+      return { ok: false, error: add.output };
+    }
+
+    // Commit with timestamp
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const commitMsg = `auto-save: dev site changes (${timestamp})`;
+    const commit = await runCmd('git', ['commit', '-m', commitMsg], { cwd: DEV_DIR });
+    if (commit.code !== 0) {
+      console.error(`[auto-save] git commit failed: ${commit.output}`);
+      return { ok: false, error: commit.output };
+    }
+
+    // Get devBranch from illumin8.json or github.json
+    let devBranch = 'development';
+    try {
+      const illumin8ConfigPath = path.join(STATE_DIR, 'illumin8.json');
+      if (fs.existsSync(illumin8ConfigPath)) {
+        const config = JSON.parse(fs.readFileSync(illumin8ConfigPath, 'utf8'));
+        devBranch = config.devBranch || 'development';
+      } else {
+        const githubConfigPath = path.join(STATE_DIR, 'github.json');
+        if (fs.existsSync(githubConfigPath)) {
+          const config = JSON.parse(fs.readFileSync(githubConfigPath, 'utf8'));
+          devBranch = config.devBranch || 'development';
+        }
+      }
+    } catch (e) {
+      console.warn(`[auto-save] Could not read config, using default branch: ${e.message}`);
+    }
+
+    // Get GitHub token and update remote URL with token authentication
+    const token = getGitHubToken();
+    if (token) {
+      // Get current remote URL
+      const remoteResult = await runCmd('git', ['remote', 'get-url', 'origin'], { cwd: DEV_DIR });
+      if (remoteResult.code === 0) {
+        const originalUrl = remoteResult.output.trim();
+        // Remove any existing token from URL and add new one
+        const cleanUrl = originalUrl.replace(/https:\/\/.*?@/, 'https://');
+        const authUrl = cleanUrl.replace('https://', `https://x-access-token:${token}@`);
+        await runCmd('git', ['remote', 'set-url', 'origin', authUrl], { cwd: DEV_DIR });
+      }
+    }
+
+    // Push to dev branch
+    console.log(`[auto-save] Pushing to ${devBranch}...`);
+    const push = await runCmd('git', ['push', 'origin', devBranch], { cwd: DEV_DIR });
+    
+    // Restore URL without token for security
+    if (token) {
+      const remoteResult = await runCmd('git', ['remote', 'get-url', 'origin'], { cwd: DEV_DIR });
+      if (remoteResult.code === 0) {
+        const authUrl = remoteResult.output.trim();
+        const cleanUrl = authUrl.replace(/https:\/\/.*?@/, 'https://');
+        await runCmd('git', ['remote', 'set-url', 'origin', cleanUrl], { cwd: DEV_DIR });
+      }
+    }
+
+    if (push.code !== 0) {
+      console.error(`[auto-save] git push failed: ${push.output}`);
+      // Don't return error - we saved locally at least
+      return { ok: true, saved: true, pushed: false, error: push.output };
+    }
+
+    console.log(`[auto-save] ✓ Saved and pushed changes to ${devBranch}`);
+    return { ok: true, saved: true, pushed: true };
+  } catch (err) {
+    console.error(`[auto-save] Unexpected error: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+}
+
 async function cloneAndBuild(repoUrl, branch, targetDir, token, opts = {}) {
   const { keepSource = false } = opts; // For dev server, keep source code
   // Clean target dir (use shell rm -rf to handle node_modules properly)
@@ -3049,10 +3154,28 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         const prodResult = await cloneAndBuild(repoUrl, prodBranch, PRODUCTION_DIR, token);
         extra += `[build] Production: ${prodResult.output}\n`;
 
-        // Clone development branch and start dev server
-        extra += `[build] Cloning dev branch (${devBranch}) for live dev server...\n`;
-        extra += `[build] Target directory: ${DEV_DIR}\n`;
-        const devResult = await cloneAndBuild(repoUrl, devBranch, DEV_DIR, token, { keepSource: true });
+        // Auto-save any existing dev site changes before clone/pull
+        extra += `[build] Checking for uncommitted dev site changes...\n`;
+        const saveResult = await autoSaveDevChanges();
+        if (saveResult.saved) {
+          extra += `[build] ✓ Auto-saved dev site changes\n`;
+        }
+
+        // Clone or pull development branch and start dev server
+        let devResult;
+        const devHasGit = fs.existsSync(path.join(DEV_DIR, '.git'));
+        const devHasPackage = fs.existsSync(path.join(DEV_DIR, 'package.json'));
+        
+        if (devHasGit && devHasPackage) {
+          // Dev site already exists - pull instead of re-cloning
+          extra += `[build] Dev site exists, pulling latest from ${devBranch}...\n`;
+          devResult = await pullDevBranch();
+        } else {
+          // Fresh clone needed
+          extra += `[build] Cloning dev branch (${devBranch}) for live dev server...\n`;
+          extra += `[build] Target directory: ${DEV_DIR}\n`;
+          devResult = await cloneAndBuild(repoUrl, devBranch, DEV_DIR, token, { keepSource: true });
+        }
         extra += `[build] Dev: ${devResult.output}\n`;
         
         // Verify dev site has files
@@ -3223,6 +3346,9 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
 // Rebuild site from GitHub (can be triggered by Gerald or webhook)
 app.post('/api/rebuild', requireSetupAuth, async (req, res) => {
   try {
+    // Auto-save dev site changes before rebuild
+    await autoSaveDevChanges();
+
     const githubConfigPath = path.join(STATE_DIR, 'github.json');
     if (!fs.existsSync(githubConfigPath)) {
       return res.status(400).json({ ok: false, error: 'No GitHub configuration found. Run setup first.' });
@@ -3262,6 +3388,9 @@ app.post('/api/rebuild', requireSetupAuth, async (req, res) => {
 // Rebuild Gerald Dashboard from GitHub
 app.post('/api/rebuild-dashboard', requireSetupAuth, async (req, res) => {
   try {
+    // Auto-save dev site changes before rebuild
+    await autoSaveDevChanges();
+
     // Kill existing dashboard
     if (dashboardProcess) {
       dashboardProcess.kill('SIGTERM');
@@ -3292,6 +3421,9 @@ app.post('/api/rebuild-dashboard', requireSetupAuth, async (req, res) => {
 // Rebuild/Update Gerald Workspace from GitHub
 app.post('/api/rebuild-workspace', requireSetupAuth, async (req, res) => {
   try {
+    // Auto-save dev site changes before rebuild
+    await autoSaveDevChanges();
+
     const token = req.body?.token?.trim() || '';
     const result = await setupWorkspace(token);
     res.json({ ok: result.ok, output: result.output });
@@ -3694,6 +3826,19 @@ fs.mkdirSync('/var/run/tailscale', { recursive: true });
 
 // Start Tailscale before the HTTP server
 startTailscale().catch(err => console.error('[tailscale] Startup error:', err));
+
+// Graceful shutdown handlers - save dev site changes before exit
+process.on('SIGTERM', async () => {
+  console.log('[shutdown] Received SIGTERM, saving dev site changes...');
+  await autoSaveDevChanges();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[shutdown] Received SIGINT, saving dev site changes...');
+  await autoSaveDevChanges();
+  process.exit(0);
+});
 
 const server = app.listen(PORT, async () => {
   console.log(`[wrapper] listening on port ${PORT}`);
