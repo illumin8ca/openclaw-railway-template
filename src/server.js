@@ -1545,7 +1545,20 @@ async function setupWorkspace(token) {
     }
     
     // Copy files from temp to workspace (don't overwrite existing)
-    const copyFiles = await runCmd('cp', ['-rn', `${tempDir}/.`, WORKSPACE_DIR]);
+    // Note: cp -n doesn't work on Alpine, use rsync or manual copy
+    try {
+      const files = fs.readdirSync(tempDir);
+      for (const file of files) {
+        if (file === '.git') continue; // Already moved
+        const src = path.join(tempDir, file);
+        const dest = path.join(WORKSPACE_DIR, file);
+        if (!fs.existsSync(dest)) {
+          fs.cpSync(src, dest, { recursive: true });
+        }
+      }
+    } catch (copyErr) {
+      console.warn('[workspace] Copy warning:', copyErr.message);
+    }
     
     await safeRemoveDir(tempDir);
     console.log('[workspace] Workspace initialized from', workspaceRepo);
@@ -1575,10 +1588,19 @@ async function startDashboard() {
   if (dashboardProcess) return;
 
   // Setup workspace first (clone/pull Gerald repo with memories, skills, etc.)
+  // Use timeout to prevent blocking startup
   console.log('[workspace] Checking workspace...');
-  const wsResult = await setupWorkspace();
-  if (!wsResult.ok) {
-    console.warn('[workspace] Setup issue:', wsResult.output);
+  try {
+    const wsPromise = setupWorkspace();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Workspace setup timeout (30s)')), 30000)
+    );
+    const wsResult = await Promise.race([wsPromise, timeoutPromise]);
+    if (!wsResult.ok) {
+      console.warn('[workspace] Setup issue:', wsResult.output);
+    }
+  } catch (wsErr) {
+    console.warn('[workspace] Setup skipped:', wsErr.message);
     // Continue anyway - workspace is optional
   }
 
@@ -2176,7 +2198,7 @@ app.post('/setup/api/codex/start-auth', requireSetupAuth, async (req, res) => {
     // Codex CLI supports device code auth via `codex login --device-auth`
     // We'll initiate the flow by running the command and capturing the output
     const { stdout, stderr } = await new Promise((resolve, reject) => {
-      const proc = child_process.spawn('codex', ['login', '--device-auth'], {
+      const proc = childProcess.spawn('codex', ['login', '--device-auth'], {
         env: { ...process.env, HOME: '/data', CODEX_HOME: '/data/.codex' },
         stdio: ['pipe', 'pipe', 'pipe']
       });
