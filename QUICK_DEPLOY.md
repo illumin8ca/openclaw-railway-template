@@ -68,9 +68,11 @@ The client's website repo needs:
 
 After setup, you can customize via `/setup` page:
 - Add more AI providers (Anthropic, OpenAI, etc.)
-- Configure Telegram bot
 - Add custom skills
 - Adjust model settings
+
+**⛔ DO NOT configure Telegram** - Telegram is reserved for Andy's personal Gerald only.
+Railway "Geraldinos" communicate via webchat and Discord only.
 
 ## 🔧 Troubleshooting
 

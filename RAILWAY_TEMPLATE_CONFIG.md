@@ -34,6 +34,10 @@ All required variables are now shared across all deployments:
 - `CLOUDFLARE_EMAIL` - Cloudflare account email
 - `SETUP_PASSWORD` - Standard setup password
 
+**⛔ NOT INCLUDED (BY DESIGN):**
+- `TELEGRAM_BOT_TOKEN` - **DO NOT ADD** - Telegram is reserved for Andy's personal Gerald only
+- `TELEGRAM_BOT_ID` - **DO NOT ADD** - Railway "Geraldinos" use webchat/Discord only
+
 **User Must Provide (Per-Deployment):**
 - `CLIENT_DOMAIN` - Their domain (e.g., solarwyse.ca)
 
