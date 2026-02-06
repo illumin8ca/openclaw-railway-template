@@ -1759,10 +1759,15 @@ async function startProdServer() {
   
   console.log(`[prod-server] Starting SSR server on port ${PROD_SERVER_PORT}...`);
 
-  // Kill any stale processes on our port first (use fuser since lsof isn't always available)
+  // Kill any stale processes - try multiple methods since containers vary
   try {
+    // Method 1: pkill by script name
+    childProcess.execSync(`pkill -f 'entry.mjs' 2>/dev/null || true`);
+    // Method 2: Try fuser if available
     childProcess.execSync(`fuser -k ${PROD_SERVER_PORT}/tcp 2>/dev/null || true`);
-    await new Promise(r => setTimeout(r, 500));
+    // Method 3: Kill by port using ss + awk
+    childProcess.execSync(`ss -tlnp | grep ':${PROD_SERVER_PORT}' | awk '{print $NF}' | grep -o '[0-9]*' | xargs -r kill -9 2>/dev/null || true`);
+    await new Promise(r => setTimeout(r, 1000));
   } catch {}
 
   // Get client domain for SITE_URL
