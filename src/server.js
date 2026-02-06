@@ -910,12 +910,19 @@ async function setupCloudflareDNS(domain, railwayDomain) {
 
   let output = '';
 
-  // 1. Look up zone ID
-  const zoneRes = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${domain}`, { headers: cfHeaders });
+  // Normalize domain: strip www. prefix if present (for subdomain creation)
+  // The apex domain (solarwyse.ca) should be used for subdomains (dev.solarwyse.ca, gerald.solarwyse.ca)
+  const apexDomain = domain.replace(/^www\./, '');
+  if (domain !== apexDomain) {
+    output += `Normalized domain: ${domain} → ${apexDomain} (for subdomain creation)\n`;
+  }
+
+  // 1. Look up zone ID (use apex domain for zone lookup)
+  const zoneRes = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${apexDomain}`, { headers: cfHeaders });
   const zoneData = await zoneRes.json();
 
   if (!zoneData.success || !zoneData.result?.length) {
-    return { ok: false, output: `Domain ${domain} not found in Cloudflare account. Add it to Cloudflare first.` };
+    return { ok: false, output: `Domain ${apexDomain} not found in Cloudflare account. Add it to Cloudflare first.` };
   }
 
   const zoneId = zoneData.result[0].id;
@@ -926,15 +933,13 @@ async function setupCloudflareDNS(domain, railwayDomain) {
   const existingData = await existingRes.json();
   const existingRecords = existingData.result || [];
 
-  // 3. Create/update CNAME records for root, dev, and gerald subdomains
+  // 3. Create/update CNAME records for apex, www, dev, and gerald subdomains
   const records = [
-    { name: domain, type: 'CNAME' },
-    { name: `dev.${domain}`, type: 'CNAME' },
-    { name: `gerald.${domain}`, type: 'CNAME' },
+    { name: apexDomain, type: 'CNAME' },
+    { name: `www.${apexDomain}`, type: 'CNAME' },
+    { name: `dev.${apexDomain}`, type: 'CNAME' },
+    { name: `gerald.${apexDomain}`, type: 'CNAME' },
   ];
-
-  // Also ensure www redirects to root
-  records.push({ name: `www.${domain}`, type: 'CNAME', content: domain });
 
   for (const record of records) {
     const content = record.content || railwayDomain;
@@ -2934,8 +2939,13 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
       // ── Illumin8 client configuration ──────────────────────────────────
       if (payload.clientDomain?.trim()) {
+        // Normalize clientDomain: strip www. prefix if present
+        // Store apex domain (e.g., solarwyse.ca) for proper subdomain routing
+        const rawDomain = payload.clientDomain.trim().toLowerCase();
+        const normalizedDomain = rawDomain.replace(/^www\./, '');
+        
         const illumin8Config = {
-          clientDomain: payload.clientDomain.trim().toLowerCase(),
+          clientDomain: normalizedDomain,
           clientName: payload.clientName?.trim() || '',
           guardrailLevel: payload.guardrailLevel || 'standard',
           githubRepo: payload.githubRepo?.trim() || '',
@@ -2992,7 +3002,9 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
       // ── Auto-configure Cloudflare DNS ─────────────────────────────────────
       if (payload.clientDomain?.trim() && process.env.CLOUDFLARE_API_KEY?.trim()) {
-        const domain = payload.clientDomain.trim().toLowerCase();
+        // Use normalized domain (www. already stripped in illumin8Config above)
+        const rawDomain = payload.clientDomain.trim().toLowerCase();
+        const domain = rawDomain.replace(/^www\./, '');
 
         // Determine Railway domain for CNAME target
         // IMPORTANT: Only use the *.up.railway.app domain, NOT custom domains (would be circular CNAME)
@@ -3046,9 +3058,12 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         const cfKey = process.env.CLOUDFLARE_API_KEY?.trim();
         const cfEmail = process.env.CLOUDFLARE_EMAIL?.trim();
         if (payload.clientDomain?.trim() && cfKey && cfEmail) {
+          // Use normalized domain (www. stripped)
+          const rawDomain = payload.clientDomain.trim().toLowerCase();
+          const normalizedDomain = rawDomain.replace(/^www\./, '');
           extra += `\n[sendgrid-domain] Configuring SendGrid domain authentication...\n`;
           const domainAuthResult = await setupSendGridDomainAuth(
-            payload.clientDomain.trim().toLowerCase(),
+            normalizedDomain,
             resolvedSendgridKey
           );
           extra += domainAuthResult.output;
