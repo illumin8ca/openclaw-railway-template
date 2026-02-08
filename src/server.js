@@ -2156,11 +2156,20 @@ const GITHUB_CLIENT_SECRET = 'c593ee8eaeae73a1dca655bad285e7a2ff657261';
 
 // Helper to get GitHub token (OAuth or manual)
 function getGitHubToken() {
-  // First check OAuth token
+  // First check OAuth token in STATE_DIR (Railway template location)
   const oauthPath = path.join(STATE_DIR, 'github-oauth.json');
   if (fs.existsSync(oauthPath)) {
     try {
       const oauth = JSON.parse(fs.readFileSync(oauthPath, 'utf8'));
+      if (oauth.access_token) return oauth.access_token;
+    } catch {}
+  }
+
+  // Check Dashboard's OAuth token location (~/dashboard/.openclaw/github-oauth.json)
+  const dashboardOAuthPath = path.join(os.homedir(), '.openclaw', 'github-oauth.json');
+  if (fs.existsSync(dashboardOAuthPath)) {
+    try {
+      const oauth = JSON.parse(fs.readFileSync(dashboardOAuthPath, 'utf8'));
       if (oauth.access_token) return oauth.access_token;
     } catch {}
   }
@@ -2569,6 +2578,7 @@ app.get('/api/github/repos', requireSetupAuth, async (req, res) => {
 
 app.get('/api/github/status', requireSetupAuth, async (req, res) => {
   try {
+    // Check Railway template's OAuth location first
     const oauthPath = path.join(STATE_DIR, 'github-oauth.json');
     if (fs.existsSync(oauthPath)) {
       const oauth = JSON.parse(fs.readFileSync(oauthPath, 'utf8'));
@@ -2579,6 +2589,19 @@ app.get('/api/github/status', requireSetupAuth, async (req, res) => {
         });
       }
     }
+
+    // Check Dashboard's OAuth location
+    const dashboardOAuthPath = path.join(os.homedir(), '.openclaw', 'github-oauth.json');
+    if (fs.existsSync(dashboardOAuthPath)) {
+      const oauth = JSON.parse(fs.readFileSync(dashboardOAuthPath, 'utf8'));
+      if (oauth.access_token && oauth.username) {
+        return res.json({
+          connected: true,
+          username: oauth.username
+        });
+      }
+    }
+
     res.json({ connected: false });
   } catch (err) {
     console.error('[github-auth] status error:', err);
@@ -2588,10 +2611,18 @@ app.get('/api/github/status', requireSetupAuth, async (req, res) => {
 
 app.post('/api/github/disconnect', requireSetupAuth, async (req, res) => {
   try {
+    // Clear Railway template's OAuth token
     const oauthPath = path.join(STATE_DIR, 'github-oauth.json');
     if (fs.existsSync(oauthPath)) {
       fs.unlinkSync(oauthPath);
     }
+
+    // Clear Dashboard's OAuth token
+    const dashboardOAuthPath = path.join(os.homedir(), '.openclaw', 'github-oauth.json');
+    if (fs.existsSync(dashboardOAuthPath)) {
+      fs.unlinkSync(dashboardOAuthPath);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error('[github-auth] disconnect error:', err);
