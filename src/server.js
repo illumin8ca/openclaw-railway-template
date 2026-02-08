@@ -539,6 +539,8 @@ async function startGateway() {
 
   if (syncResult.code !== 0) {
     console.error(`[gateway] ⚠️  WARNING: Token sync failed with code ${syncResult.code}`);
+    // Re-run config fix — shared secrets may have re-introduced invalid providers
+    fixInvalidConfig();
     console.log(`[gateway] Falling back to direct JSON write for token...`);
     try {
       directConfigSet("gateway.auth.token", OPENCLAW_GATEWAY_TOKEN);
@@ -572,6 +574,10 @@ async function startGateway() {
   }
 
   console.log(`[gateway] ========== TOKEN SYNC COMPLETE ==========`);
+
+  // Final config sanitization right before spawn — guards against race conditions
+  // where load-secrets.sh or other background tasks re-introduced invalid providers
+  fixInvalidConfig();
 
   const args = [
     "gateway",
